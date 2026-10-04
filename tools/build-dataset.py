@@ -17,6 +17,7 @@
 """
 
 import gzip
+import math
 import os
 import random
 import struct
@@ -126,9 +127,10 @@ def center_of_mass(pixels):
 def center_and_downsample(pixels):
     """质心居中（整数平移）→ 13×13 面积平均 → 返回 PIL 'L' 图。"""
     cx, cy = center_of_mass(pixels)
-    # 目标中心 (13.5, 13.5)，四舍五入取整数偏移
-    dx = int(round(13.5 - cx))
-    dy = int(round(13.5 - cy))
+    # 目标中心 (13.5, 13.5)，四舍五入（round-half-up，与 JS Math.round 一致；
+    # 注意 Python 内建 round() 是 round-half-even，此处不能直接用）取整数偏移
+    dx = int(math.floor(13.5 - cx + 0.5))
+    dy = int(math.floor(13.5 - cy + 0.5))
 
     img = Image.frombytes("L", (IMG_SIZE, IMG_SIZE), bytes(pixels))
     canvas = Image.new("L", (IMG_SIZE, IMG_SIZE), 0)
@@ -209,6 +211,8 @@ def main():
     train_labels = read_idx_labels(os.path.join(CACHE_DIR, FILES[1]))
     n_test, test_images = read_idx_images(os.path.join(CACHE_DIR, FILES[2]))
     test_labels = read_idx_labels(os.path.join(CACHE_DIR, FILES[3]))
+    assert len(train_labels) == n_train, f"train 图片/标签数量不一致：{n_train} vs {len(train_labels)}"
+    assert len(test_labels) == n_test, f"test 图片/标签数量不一致：{n_test} vs {len(test_labels)}"
     print(f"MNIST 读取完毕：train {n_train} 张，test {n_test} 张")
 
     build_split("train", train_images, train_labels, TRAIN_PER_CLASS)
