@@ -19,6 +19,11 @@
  * 动画进行中再次调用 playInference / playTrainingStep → 返回进行中的
  * Promise（不排队、不打断）。动画结束后状态落在终态。
  *
+ * # 状态语义（教学停留用）
+ * - playTrainingStep 结束后，输出柱保持 before（灰）/ after（蓝）双色对比态，
+ *   直到下一次 playInference / render；
+ * - playInference 开始时会清除热力图（highlightNode）与对比柱，回到"当前输入"态。
+ *
  * # 点击交互
  * 点击隐藏节点 → highlightNode('hidden', idx)：输入墙切换显示该节点
  * 169 权重的蓝红热力图；再点一次该节点、或点击空白处 → 恢复输入显示。
@@ -516,6 +521,8 @@ export function initStage(canvas, net) {
      * 训练步动画：红色误差粒子 output→hidden→input 反向流动，
      * |Δw| top-24 的边发扩张脉冲，输出柱显示 before/after 双色对比。
      * @param {object} before { trace, w1:[...], w2:[...], y? }
+     *   **注意：w1/w2 必须是训练步之前的快照拷贝**（如 net.w1.slice()）；
+     *   传网络的活引用会导致 Δw 全零、脉冲静默消失。
      * @param {object} after 同 before（训练步之后的快照）
      * @returns {Promise<void>}；动画中重复调用返回同一 Promise
      */
