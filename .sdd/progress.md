@@ -32,6 +32,11 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
+## Task 12: implementation in progress
+- Task 12: brief written (lesson guide + E2E + README + serve.command), implementer dispatched.
+- E2E 确定性证据（controller 实测）：seed=7 + Adam 0.001 + 15 epoch → test acc 0.9033；seed=1234 → 0.73。E2E 用固定 seed=7、阈值 acc ≥ 0.9（newModel 加可选 seed 参数）。
+- 待 Task 12 完成后：最终全分支 review → 晨间交付总结。GitHub 发布默认不执行。
+
 ## Task 11: complete (review APPROVED, fixes applied)
 - Task 11: complete (commit a8c8d20) — training panel + confusion matrix + dataset management.
 - **极性约定（load-bearing，已落实）**：网络输入统一"墨=1"。手写 PNG（黑字白纸）`x = 1 − gray/255` 再走 `preprocess()`；MNIST PNG（白字黑底）`x = gray/255`（13×13 直接，不取反）。
