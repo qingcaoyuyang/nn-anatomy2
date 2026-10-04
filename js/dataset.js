@@ -7,6 +7,8 @@
  * ES module，零依赖，不直接碰 DOM；fetch 可注入以便测试。
  */
 
+import { preprocess } from './preprocess.js';
+
 /** 打包数据集在应用内的根目录（相对路径）。 */
 export const SAMPLE_DATASET_ROOT = 'data/sample-digits';
 /** 每个划分每类包含的样本数。 */
@@ -61,4 +63,82 @@ export async function importSampleDataset(workspace, { fetchImpl = fetch, onProg
     done += 1;
     if (typeof onProgress === 'function') onProgress(done, total);
   }
+}
+
+/* —— 样本解码（Task 11） —— */
+
+/**
+ * Load-bearing 极性约定（网络输入统一"墨=1"）：
+ * - handwritten（260×260 黑字白纸 PNG）：灰度 g → 墨 255−g → preprocess(ink, w, h)
+ * - mnist-import（13×13 白字黑底 PNG）：x = g/255（不取反、不居中，已是标准输入）
+ * - augmented：来自手写 PNG 的增强，极性同 handwritten
+ */
+
+/** RGBA → 灰度 Uint8Array（0~255）。 */
+function toGray(data) {
+  const n = data.length / 4;
+  const gray = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    gray[i] = Math.round((data[i * 4] + data[i * 4 + 1] + data[i * 4 + 2]) / 3);
+  }
+  return gray;
+}
+
+/**
+ * 按来源极性把像素解码为 169 维"墨=1"输入。
+ * @param {Uint8ClampedArray} data RGBA 像素
+ * @param {number} width 高度
+ * @param {number} height 宽度
+ * @param {string} source manifest 中的来源字段
+ * @returns {Array|Float64Array} 169 个 0~1
+ * @throws 未知来源或 mnist-import 尺寸不是 13×13 时抛错（调用方按损坏样本跳过）
+ */
+function decodeSamplePixels(data, width, height, source) {
+  const gray = toGray(data);
+  if (source === 'mnist-import') {
+    if (width !== 13 || height !== 13 || gray.length !== 169) {
+      throw new Error(`mnist-import 样本尺寸异常：${width}×${height}（应为 13×13）。`);
+    }
+    const x = new Array(169);
+    for (let i = 0; i < 169; i++) x[i] = gray[i] / 255;
+    return x;
+  }
+  if (source === 'handwritten' || source === 'augmented') {
+    const w = width || 0;
+    const h = height || 0;
+    if (gray.length !== w * h) {
+      throw new Error(`样本像素数与尺寸不符：${gray.length} vs ${w}×${h}。`);
+    }
+    // 黑字白纸 → 墨=1：取反后再走标准预处理管线（居中 + 13×13 + 归一化）
+    const ink = new Uint8Array(gray.length);
+    for (let i = 0; i < gray.length; i++) ink[i] = 255 - gray[i];
+    return preprocess(ink, w, h);
+  }
+  throw new Error(`未知的样本来源：${source}。`);
+}
+
+/**
+ * 从工作区加载某划分的全部样本（仅浏览器：依赖 createImageBitmap + document）。
+ * 损坏条目（读像素失败/解码失败）会被 console.warn 并跳过，不中断整体。
+ * @param {import('./workspace.js').Workspace} workspace
+ * @param {'train'|'test'} split
+ * @returns {Promise<Array<{ x: Array|Float64Array, y: number, id: string }>>}
+ *          顺序与 manifest 一致；y 为数字 0~9
+ */
+export async function loadSamples(workspace, split) {
+  if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') {
+    throw new Error('loadSamples 仅在浏览器环境中可用。');
+  }
+  const entries = workspace.listSamples(split);
+  const out = [];
+  for (const entry of entries) {
+    try {
+      const { data, width, height } = await workspace.readSamplePixels(split, entry.id);
+      const x = decodeSamplePixels(data, width, height, entry.source);
+      out.push({ x, y: Number(entry.label), id: entry.id });
+    } catch (e) {
+      console.warn(`跳过损坏样本 ${entry.id}：`, e && e.message ? e.message : e);
+    }
+  }
+  return out;
 }

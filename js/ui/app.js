@@ -16,9 +16,31 @@ import {
 import { initDrawing, BOARD_SIZE } from './drawing.js';
 import { initStage } from './stage.js';
 import { createNetwork } from '../network.js';
+import { createOptState } from '../trainer.js';
+import { ADAM_DEFAULT_LR, paramCount } from '../optimizer.js';
+import { initPanel, uniqueModelName } from './panel.js';
+import { initDatasetViewer } from './dataset-viewer.js';
 
 /** 调试句柄（生产保留，无害）。 */
-const debugHandle = { workspace: null, drawing: null, boot, label: null };
+const debugHandle = { workspace: null, drawing: null, boot, label: null, panel: null, viewer: null };
+
+/** 当前模型状态（Task 11）：训练面板与左栏单步训练共享的唯一可变状态。 */
+const ARCH = { inputs: 169, hidden: 16, outputs: 10 };
+const model = {
+  name: null,
+  net: null,
+  optState: null,
+  optimizer: 'adam',
+  lr: ADAM_DEFAULT_LR,
+  epochsTrained: 0,
+  samplesSeen: 0,
+  runSeed: 0,
+  history: [],
+};
+/** 当前标签（模块级：api.getLabel 需要在 boot 外访问）。 */
+let currentLabel = '0';
+let panelApi = null;
+let viewerApi = null;
 
 /** 工作区显示名：真实目录用 handle.name，内存后端用固定名。 */
 function workspaceDisplayName(workspace) {
@@ -75,16 +97,7 @@ export async function boot({ workspaceBackend } = {}) {
       <h2 class="card-title">神经网络舞台</h2>
       <canvas id="stage" class="stage" width="640" height="420"></canvas>
     </section>
-    <aside class="card panel-right" aria-label="训练">
-      <h2 class="card-title">训练</h2>
-      <dl class="kv">
-        <div class="kv-row"><dt>模型</dt><dd class="mono" id="kv-model">—</dd></div>
-        <div class="kv-row"><dt>优化器</dt><dd class="mono">Adam</dd></div>
-        <div class="kv-row"><dt>轮次</dt><dd class="mono" id="kv-epoch">0</dd></div>
-        <div class="kv-row"><dt>训练样本</dt><dd class="mono" id="kv-train-count">0</dd></div>
-      </dl>
-      <p class="placeholder-hint">训练面板（Task 11 实现）</p>
-    </aside>`;
+    <aside class="card panel-right" id="panel-right" aria-label="训练"></aside>`;
   app.appendChild(main);
 
   // —— 工作区引导遮罩 ——
@@ -124,7 +137,6 @@ export async function boot({ workspaceBackend } = {}) {
   // —— 左栏：画板 + 标签 + 预览 ——
   const previewCanvas = $('preview13');
   const previewCtx = previewCanvas.getContext('2d');
-  let currentLabel = '0';
 
   const refreshPreview = () => {
     if (!debugHandle.drawing) return;
@@ -174,7 +186,7 @@ export async function boot({ workspaceBackend } = {}) {
     setStatus('画板已清空。');
   });
 
-  /** 「保存并训练」：本任务只落盘样本，真正的单步训练是 Task 11 的事。 */
+  /** 「保存并训练」：保存样本 → 单样本训练一步（舞台动画）→ 清空画板。 */
   const saveSample = async () => {
     const ws = debugHandle.workspace;
     if (!ws) {
@@ -184,17 +196,30 @@ export async function boot({ workspaceBackend } = {}) {
     const saveBtn = $('btn-save');
     saveBtn.disabled = true;
     try {
+      const x = drawing.getPixels13(); // 清空前捕获当前画布（墨=1 的 13×13）
+      const y = Number(currentLabel);
       const blob = await canvasToPngBlob(drawing.canvas);
       const id = await ws.addSample('train', currentLabel, blob, {
         width: BOARD_SIZE,
         height: BOARD_SIZE,
         source: 'handwritten',
       });
-      const n = ws.listSamples('train').length;
-      $('kv-train-count').textContent = String(n);
-      setStatus(`已保存样本 #…${id.slice(-6)}（标签 ${currentLabel}，训练集共 ${n} 个）`);
       drawing.clear();
       refreshPreview();
+      updateKv();
+      setStatus(`已保存样本 #…${id.slice(-6)}（标签 ${currentLabel}）`);
+      // 单步训练：舞台播放这次权重更新的 before/after 对比。
+      // 批量训练进行中则跳过单步（避免两次训练交错改权重），样本照常保存。
+      if (panelApi.isTraining()) {
+        setStatus(`已保存样本 #…${id.slice(-6)}（标签 ${currentLabel}；批量训练进行中，跳过单步训练）。`);
+      } else {
+        try {
+          await panelApi.trainSingleStep(x, y);
+          setStatus(`已保存样本 #…${id.slice(-6)}（标签 ${currentLabel}），并完成一次单步训练。`);
+        } catch (e) {
+          setStatus(`样本已保存，但单步训练失败：${e && e.message ? e.message : e}`);
+        }
+      }
     } catch (e) {
       setStatus(`保存失败：${e && e.message ? e.message : e}`);
     } finally {
@@ -205,18 +230,160 @@ export async function boot({ workspaceBackend } = {}) {
 
   // —— 中栏：神经网络舞台（Task 10） ——
   // 网络与舞台实例挂在 debugHandle 上，供训练面板（Task 11）与教学引导（Task 12）复用。
+  // 注意：这里是启动时的临时网络；工作区就绪后 initDefaultModel 会加载/创建真实模型并 setNet。
   const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 7);
   const stage = initStage($('stage'), net);
   debugHandle.net = net;
   debugHandle.stage = stage;
 
+  // —— 模型状态管理（Task 11） ——
+
+  /** kv 行刷新（左栏计数 + 右栏模型信息；面板创建前调用则静默跳过缺失节点）。 */
+  function updateKv() {
+    const set = (id, text) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+    const ws = debugHandle.workspace;
+    set('kv-model', model.name || '—');
+    set('kv-optimizer', model.optimizer === 'adam' ? 'Adam' : 'SGD');
+    set('kv-lr', String(Number(model.lr.toPrecision(3))));
+    set('kv-epoch', String(model.epochsTrained));
+    set('kv-train-count', ws ? String(ws.listSamples('train').length) : '0');
+    set('kv-test-count', ws ? String(ws.listSamples('test').length) : '0');
+  }
+
+  /** 训练后自动保存：权重 + 优化器状态 + 训练元信息。 */
+  async function saveModelNow() {
+    const ws = debugHandle.workspace;
+    if (!ws || !model.net || !model.name) return;
+    await ws.saveModel(model.name, model.net, model.optState, {
+      epochsTrained: model.epochsTrained,
+      samplesSeen: model.samplesSeen,
+      history: model.history,
+      optimizer: model.optimizer,
+      lr: model.lr,
+      runSeed: model.runSeed,
+    });
+  }
+
+  async function listModelNames() {
+    const ws = debugHandle.workspace;
+    if (!ws) return [];
+    return (await ws.listModels()).map((e) => e.name);
+  }
+
+  async function newModel(name) {
+    model.name = uniqueModelName(name, await listModelNames());
+    model.net = createNetwork(ARCH, Date.now() % 2 ** 32);
+    model.optimizer = 'adam';
+    model.lr = ADAM_DEFAULT_LR;
+    model.optState = createOptState(model.net, 'adam');
+    model.epochsTrained = 0;
+    model.samplesSeen = 0;
+    model.runSeed = 0;
+    model.history = [];
+    if (debugHandle.stage) debugHandle.stage.setNet(model.net);
+    debugHandle.net = model.net;
+    await saveModelNow();
+    updateKv();
+  }
+
+  async function loadModel(name) {
+    const ws = debugHandle.workspace;
+    if (!ws) throw new Error('请先选择工作区。');
+    const doc = await ws.loadModel(name);
+    if (!doc.net || !doc.net.arch) throw new Error(`模型文件损坏：${name}`);
+    model.name = doc.name;
+    model.net = doc.net;
+    const m = doc.metrics || {};
+    model.epochsTrained = Number.isFinite(m.epochsTrained) ? m.epochsTrained : 0;
+    model.samplesSeen = Number.isFinite(m.samplesSeen) ? m.samplesSeen : 0;
+    model.history = Array.isArray(m.history) ? m.history : [];
+    model.optimizer = m.optimizer === 'sgd' ? 'sgd' : 'adam';
+    model.lr = Number.isFinite(m.lr) && m.lr > 0 ? m.lr : ADAM_DEFAULT_LR;
+    model.runSeed = Number.isFinite(m.runSeed) ? m.runSeed : 0;
+    // 恢复 Adam 动量：形状对得上才复用，否则重建（架构变更时不炸）
+    const st = doc.optimizerState;
+    if (model.optimizer === 'adam' && st && st.m && st.m.length === paramCount(model.net)) {
+      model.optState = st;
+    } else {
+      model.optState = createOptState(model.net, model.optimizer);
+    }
+    debugHandle.stage.setNet(model.net);
+    debugHandle.net = model.net;
+    updateKv();
+  }
+
+  async function deleteModel(name) {
+    const ws = debugHandle.workspace;
+    if (!ws) throw new Error('请先选择工作区。');
+    await ws.deleteModel(name);
+    if (model.name === name) {
+      await newModel('未命名模型'); // 当前模型被删 → 自动新建
+    }
+  }
+
+  /** 切换优化器：重建优化器状态（旧动量不清零会污染新优化器）。 */
+  async function setOptimizer(name) {
+    if (name !== 'adam' && name !== 'sgd') throw new Error(`未知优化器：${name}`);
+    if (!model.net) return;
+    model.optimizer = name;
+    model.optState = createOptState(model.net, name);
+    await saveModelNow();
+  }
+
+  function setLr(lr) {
+    if (Number.isFinite(lr) && lr > 0) model.lr = lr;
+  }
+
+  /** 样本变更（导入/删除）后：刷新计数 + 面板重评。 */
+  async function notifySamplesChanged() {
+    updateKv();
+    if (panelApi) await panelApi.onSamplesChanged();
+  }
+
+  /** 工作区就绪后：加载首个模型，不存在则创建「未命名模型」。 */
+  async function initDefaultModel() {
+    const names = await listModelNames();
+    if (names.length > 0) await loadModel(names[0]);
+    else await newModel('未命名模型');
+    if (panelApi) await panelApi.refresh();
+  }
+
+  /** 训练面板与数据集管理器的宿主 API。 */
+  const api = {
+    getWorkspace: () => debugHandle.workspace,
+    getStage: () => debugHandle.stage,
+    getDrawing: () => debugHandle.drawing,
+    getLabel: () => currentLabel,
+    getModel: () => model,
+    newModel,
+    loadModel,
+    deleteModel,
+    listModelNames,
+    setOptimizer,
+    setLr,
+    nextRunSeed: () => { model.runSeed += 1; return model.runSeed; },
+    saveModelNow,
+    notifySamplesChanged,
+    updateKv,
+    openDatasetViewer: () => { if (viewerApi) viewerApi.open(); },
+  };
+
+  // —— 右栏：训练面板 + 数据集管理（Task 11） ——
+  panelApi = initPanel($('panel-right'), api);
+  debugHandle.panel = panelApi;
+  viewerApi = initDatasetViewer(api);
+  debugHandle.viewer = viewerApi;
+
   // —— 工作区装配 ——
   const setWorkspace = async (ws) => {
     debugHandle.workspace = ws;
     wsNameEl.textContent = workspaceDisplayName(ws);
-    const n = ws.listSamples('train').length;
-    $('kv-train-count').textContent = String(n);
     guide.classList.add('hidden');
+    await initDefaultModel(); // 加载/创建模型（含 updateKv）
+    const n = ws.listSamples('train').length;
     setStatus(`工作区就绪：${workspaceDisplayName(ws)}，训练集 ${n} 个样本。在画板上写字吧。`);
   };
 

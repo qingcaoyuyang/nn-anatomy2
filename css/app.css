@@ -324,3 +324,253 @@ html, body {
   .ws-name { display: none; }
   .board { max-width: 100%; }
 }
+
+/* —— 右栏：训练面板（Task 11） —— */
+.sub-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fffdf9;
+}
+.sub-card:last-child { margin-bottom: 0; }
+.sub-title {
+  margin: 0 0 10px;
+  font-family: var(--font-title);
+  font-size: 14px;
+  font-weight: 700;
+}
+.sub-title-sm {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.model-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.model-row .select { flex: 1; min-width: 0; }
+.select {
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+}
+.btn-sm { padding: 6px 10px; font-size: 13px; }
+.btn-xs { padding: 2px 8px; font-size: 12px; }
+.ctl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ctl-label { min-width: 52px; color: var(--muted); font-size: 13px; }
+.ctl-row input[type="range"] { flex: 1; accent-color: var(--brand); }
+.input-num {
+  width: 70px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.loss-curve {
+  width: 100%;
+  height: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  margin-top: 8px;
+}
+.caption {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+.metric-big {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.metric-big .mono { font-size: 28px; font-weight: 700; color: var(--brand-dark); }
+.metric-label { font-size: 12px; color: var(--muted); }
+.per-class { margin-bottom: 4px; }
+.pc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.pc-label { width: 14px; font-size: 12px; color: var(--muted); }
+.pc-bar {
+  flex: 1;
+  height: 8px;
+  background: #f5f0e8;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pc-fill {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  border-radius: 4px;
+}
+.pc-val { width: 38px; text-align: right; font-size: 12px; }
+.confusion {
+  border-collapse: collapse;
+  margin: 0 auto 6px;
+}
+.confusion th, .confusion td {
+  width: 24px;
+  height: 24px;
+  text-align: center;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  padding: 0;
+}
+.confusion th { background: #faf6ef; color: var(--muted); font-weight: 600; }
+.confusion td { cursor: pointer; background: #fff; }
+.confusion td:hover { outline: 2px solid var(--brand); }
+.mono-sm { font-family: var(--font-mono); font-size: 13px; }
+
+/* —— 混淆矩阵格子弹层 —— */
+.cell-popup {
+  position: fixed;
+  z-index: 100;
+  width: 280px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(41, 37, 36, 0.18);
+  padding: 10px;
+}
+.cell-popup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.cell-popup-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.cell-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.thumb26 {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  image-rendering: pixelated;
+}
+
+/* —— 数据集管理 modal —— */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(41, 37, 36, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(41, 37, 36, 0.25);
+  width: 640px;
+  max-width: 95vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+}
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.modal-head .card-title { margin: 0; }
+.tab-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.tab {
+  padding: 6px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tab.selected {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+.import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.progress {
+  flex: 1;
+  height: 8px;
+  background: #f5f0e8;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--brand);
+  border-radius: 4px;
+  transition: width 0.15s;
+}
+.ds-grid-wrap { overflow: auto; flex: 1; min-height: 200px; }
+.ds-class-row { margin-bottom: 10px; }
+.ds-class-label {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.ds-class-count { font-size: 12px; }
+.ds-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ds-thumb {
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  line-height: 0;
+}
+.ds-thumb:hover { border-color: var(--brand-dark); outline: 2px solid var(--brand); }
+.ds-thumb canvas {
+  width: 26px;
+  height: 26px;
+  image-rendering: pixelated;
+  display: block;
+}
+.ds-thumb:disabled { opacity: 0.4; cursor: wait; }

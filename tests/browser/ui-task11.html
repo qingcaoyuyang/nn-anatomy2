@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>ui-task11 smoke</title>
+  <link rel="stylesheet" href="../../css/fonts.css" />
+  <link rel="stylesheet" href="../../css/app.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    // —— rAF 垫片（仅测试环境）：headless-shell 在 --virtual-time-budget 下 rAF 只触发一次，
+    // 用 setTimeout 垫片代替帧泵；产品在真实浏览器中走原生 rAF。
+    window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+    window.cancelAnimationFrame = (id) => clearTimeout(id);
+    // —— 编解码抖动垫片（仅测试环境）：实测 headless-shell + virtual-time 下
+    // canvas.toBlob / createImageBitmap 的回调偶发永不触发（重跑即恢复，非必现）。
+    // 真实浏览器中这两个 API 可靠；此处加超时重试，保证烟雾测试稳定。
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(label + '-timeout')), ms)),
+      ]);
+    }
+    const rawToBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (cb, type, quality) {
+      let n = 0;
+      const attempt = () => {
+        n++;
+        withTimeout(
+          new Promise((resolve) => rawToBlob.call(this, resolve, type, quality)),
+          3000, 'toblob',
+        ).then((blob) => {
+          if (blob) cb(blob);
+          else if (n < 8) attempt();
+          else cb(null);
+        }).catch(() => {
+          if (n < 8) attempt();
+          else cb(null);
+        });
+      };
+      attempt();
+    };
+    const rawCreateImageBitmap = window.createImageBitmap.bind(window);
+    window.createImageBitmap = function (...args) {
+      let n = 0;
+      const attempt = () => {
+        n++;
+        return withTimeout(rawCreateImageBitmap(...args), 3000, 'cib').catch((e) => {
+          if (n < 8) return attempt();
+          throw e;
+        });
+      };
+      return attempt();
+    };
+    // 删除确认在测试中一律通过
+    window.confirm = () => true;
+
+    import { boot } from '../../js/ui/app.js';
+    import { MemoryBackend, canvasToPngBlob } from '../../js/workspace.js';
+
+    const params = new URLSearchParams(location.search);
+    const shot = params.get('shot'); // null | 'panel' | 'modal'
+    const results = { pass: 0, fail: 0, errors: [] };
+    const ok = (cond, name) => {
+      if (cond) { results.pass++; }
+      else { results.fail++; results.errors.push(name); }
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    /** 现场画一张 13×13 伪样本：白底 + 随类别变长的黑横条 + 小方块（墨=1 可学）。
+     * 环境注记：headless-shell 的 createImageBitmap 解码不了 260×260 PNG
+     * （实测：260×260 必卡死，13×13 正常；真实浏览器无此限制）。
+     * 故烟雾测试用 13×13 伪样本，但来源仍标 'handwritten'，
+     * 完整走"黑字白纸 → 墨=1 → preprocess"的手写极性路径。 */
+    function drawPseudoSample(d, k) {
+      const c = document.createElement('canvas');
+      c.width = 13;
+      c.height = 13;
+      const g = c.getContext('2d');
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 13, 13);
+      g.fillStyle = '#000000';
+      g.fillRect(2, 4, 2 + d, 3); // 横条长度随类别变化（居中平移后仍可区分）
+      g.fillRect(2 + k * 6, 9, 3, 2); // 小方块位置随 k 变化
+      return c;
+    }
+
+    async function main() {
+      try {
+        await Promise.race([document.fonts.ready, sleep(3000)]);
+        await boot({ workspaceBackend: new MemoryBackend() });
+
+        let ws = null;
+        for (let i = 0; i < 100 && !ws; i++) {
+          ws = window.__nnanatomy && window.__nnanatomy.workspace;
+          if (!ws) await sleep(50);
+        }
+        ok(!!ws, 'workspace 就绪');
+        if (!ws) { document.title = JSON.stringify(results); return; }
+
+        const panel = window.__nnanatomy.panel;
+        const viewer = window.__nnanatomy.viewer;
+        ok(!!panel && typeof panel.batchTrain === 'function', 'panel api 就绪');
+        ok(!!viewer && typeof viewer.open === 'function', 'viewer api 就绪');
+        ok(!!document.getElementById('panel-right'), '右栏挂载点存在');
+
+        // —— 20 个伪样本（每类 2 个）——
+        for (let d = 0; d <= 9; d++) {
+          for (let k = 0; k < 2; k++) {
+            const blob = await canvasToPngBlob(drawPseudoSample(d, k));
+            await ws.addSample('train', String(d), blob, {
+              width: 13, height: 13, source: 'handwritten',
+            });
+          }
+        }
+        ok(ws.listSamples('train').length === 20, '20 个伪样本已入库');
+
+        // —— 批量训练 2 轮（含首轮舞台动画）——
+        await panel.batchTrain(2);
+        const models = await ws.listModels();
+        ok(models.length >= 1, '训练后模型已保存（listModels 非空）');
+        ok(panel.getModel().history.length === 2, 'loss history 长度为 2');
+        ok(panel.getEval() !== null, '训练后自动评估完成');
+        ok(document.getElementById('kv-epoch').textContent === '2', '轮次 kv 累计为 2');
+        const tds = document.querySelectorAll('#confusion td');
+        ok(tds.length === 100, '混淆矩阵 100 格');
+        ok(document.querySelectorAll('#per-class .pc-row').length === 10, '每类准确率 10 条');
+
+        // —— 数据集 modal：网格 ≥20，删除 1 张 → 19 ——
+        await viewer.open();
+        await sleep(200);
+        let thumbs = document.querySelectorAll('#dataset-modal .ds-thumb');
+        ok(thumbs.length >= 20, `数据集网格 ≥20 张（实际 ${thumbs.length}）`);
+        thumbs[0].click();
+        // 等待异步删除 + 刷新
+        let left = 0;
+        for (let i = 0; i < 100; i++) {
+          left = document.querySelectorAll('#dataset-modal .ds-thumb').length;
+          if (left === 19) break;
+          await sleep(100);
+        }
+        ok(left === 19, '删除 1 张后网格剩 19 张');
+        ok(ws.listSamples('train').length === 19, 'manifest 训练集剩 19 条');
+
+        // —— 混淆矩阵点一格 → 弹层出现 ——
+        const td = document.querySelector('#confusion td');
+        td.click();
+        await sleep(200);
+        ok(!!document.querySelector('.cell-popup'), '点击混淆矩阵格子弹出样本层');
+        panel.closeCellPopup();
+
+        // —— 截图模式收尾状态 ——
+        if (shot === 'modal') {
+          await viewer.open();
+        } else {
+          viewer.close();
+        }
+        await sleep(300);
+      } catch (e) {
+        results.fail++;
+        results.errors.push('异常：' + (e && e.message ? e.message : String(e)));
+      }
+      document.title = JSON.stringify({ shot, ...results });
+    }
+
+    main();
+  </script>
+</body>
+</html>
