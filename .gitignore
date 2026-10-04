@@ -1,0 +1,22 @@
+# Rust
+target/
+
+# Node
+node_modules/
+
+# SDD 控制器工作区（不入库）
+.superpowers/
+
+# 构建产物
+dist/
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db

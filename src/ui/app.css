@@ -1,0 +1,27 @@
+/* nn-anatomy 神经网络解剖教室 — 全局样式占位（Task 1） */
+/* 后续任务按 design-spec 接入本地字体与完整主题。 */
+
+:root {
+  --bg: #1c1410;
+  --fg: #fff7ed;
+  --accent: #f97316;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+#app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  font-size: 20px;
+}

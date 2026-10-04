@@ -1,0 +1,1 @@
+{"app":{"windows":[{"height":800,"title":"nn-anatomy 神经网络解剖教室","width":1280}],"withGlobalTauri":true},"build":{"devUrl":"http://localhost:5173","frontendDist":"../"},"bundle":{"active":true,"targets":["dmg","app"]},"identifier":"com.juewei.nn-anatomy","productName":"nn-anatomy","version":"0.1.0"}
