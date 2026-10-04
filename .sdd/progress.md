@@ -32,12 +32,14 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
-## Task 10: implementation complete, review in progress
-- Task 10: implementer finished (commit 7f287d1) — stage.js + particles.js + app.js integration + smoke page (15/15).
-- Controller verified: 46/46 node tests; smoke {"pass":15,"fail":0}; inference + training screenshots reviewed, legible and spec-compliant.
-- **极性约定裁决（load-bearing，Task 11 必须遵守）**：网络输入统一"墨=1"。手写 PNG（黑字白纸）解码用 `x = 1 - gray/255`；MNIST 样本 PNG（白字黑底）解码用 `x = gray/255`。手写 260×260 先按此极性转灰度再走 `preprocess()`；MNIST 13×13 直接 `/255`。Task 10 烟雾页原先用反极性，已修正（commit 待）。
-- 环境修正：rAF 在 virtual-time 下只触发一次（AGENTS.md 已更新），动画测试用 setTimeout(16) 垫片。
-- Reviewer dispatched; result pending.
+## Task 11: implementation in progress
+- Task 11: brief written (training panel + confusion matrix + dataset management).
+- **极性约定裁决（load-bearing，Task 11 必须遵守）**：网络输入统一"墨=1"。手写 PNG（黑字白纸）解码用 `x = 1 - gray/255` 再走 `preprocess()`；MNIST 样本 PNG（白字黑底）解码用 `x = gray/255`（13×13 直接，不取反）。
+
+## Task 10: complete
+- Task 10: complete (commit 7f287d1, review APPROVED)
+- Controller verified: 46/46 node tests; smoke {"pass":15,"fail":0}; inference + training screenshots reviewed, legible.
+- Review follow-ups: stage JSDoc 补快照拷贝要求 + 状态语义文档。
 
 ## Task 9: complete
 - Task 9: complete (commit 303bfb3, review APPROVED after fix round)
