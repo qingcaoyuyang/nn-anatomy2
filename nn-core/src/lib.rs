@@ -9,6 +9,9 @@ pub fn placeholder() -> &'static str {
     "nn-core 就绪"
 }
 
+/// 神经网络模块（Task 2）：MLP 169→16→10 前向/反向/He 初始化。
+pub mod nn;
+
 #[cfg(test)]
 mod tests {
     use super::*;

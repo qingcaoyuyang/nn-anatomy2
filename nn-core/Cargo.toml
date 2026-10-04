@@ -6,3 +6,4 @@ edition = "2021"
 # 纯 Rust 神经网络计算核心：零 Tauri 依赖，保证 `cargo test` 无需系统 GUI 库。
 # 后续任务（Task 2+）在此添加神经网络模块（src/nn/*）。
 [dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
