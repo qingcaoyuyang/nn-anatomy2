@@ -7,5 +7,6 @@
 
 pub mod network;
 pub mod optimizer;
+pub mod preprocess;
 
 pub use network::{Arch, ForwardOut, Gradients, Network};
