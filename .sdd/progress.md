@@ -32,12 +32,13 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
-## Task 12: implementation complete, final review in progress
+## Task 12: complete (FINAL REVIEW: SHIP)
 - Task 12: complete (commit 37bdab2) — lesson guide + E2E + README + serve.command.
-- Controller verified: 52/52 node tests; E2E 重跑 pass=8 fail=0 acc=0.9033（~15s）；walkthrough 8/8；截图（训练完成/lesson 条/混淆矩阵 90.3%）目检通过。
-- E2E 确定性：init seed=23（app 真实路径 runSeed=1 下 seed=7 只有 0.8867；阈值 0.9 未动）。
-- 修：导入/删除后左栏状态行过期（commit 9c9ff26）。
-- Final full-branch review dispatched; verdict pending → 然后晨间交付总结。
+- Controller verified: 52/52 node tests; E2E 重跑 pass=8 fail=0 acc=0.9033；walkthrough 8/8；截图目检通过。
+- 修：导入/删除后左栏状态行过期（9c9ff26）；README 截图占位补实图（4268c47）。
+- Final review verdict: **SHIP**（无 Critical/阻塞性 Important；4 条 Minor 不阻塞）。报告：.superpowers/sdd/implementation-plan/final-review.md。
+- 全部分支干净。GitHub 发布未执行，等用户明确批准。
+- 真机待用户确认：260×260 手写全链路、真实目录持久化、原生 rAF 流畅度、serve.command 双击。
 
 ## Task 11: complete (review APPROVED, fixes applied)
 - Task 11: complete (commit a8c8d20) — training panel + confusion matrix + dataset management.
