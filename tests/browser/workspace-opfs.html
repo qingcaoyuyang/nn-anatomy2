@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>running…</title>
+</head>
+<body>
+<script type="module">
+import { DirHandleBackend, Workspace, canvasToPngBlob } from '../../js/workspace.js';
+import { runWorkspaceSuite } from '../workspace-suite.js';
+
+// 浏览器侧最小 assert 垫片：提供 suite 所需的四个方法。
+const assert = {
+  ok(v, m) {
+    if (!v) throw new Error(`assert.ok 失败: ${m || ''}`);
+  },
+  strictEqual(a, b, m) {
+    if (a !== b) throw new Error(`strictEqual 失败: ${a} !== ${b} ${m || ''}`);
+  },
+  deepStrictEqual(a, b, m) {
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      throw new Error(`deepStrictEqual 失败 ${m || ''}`);
+    }
+  },
+  async rejects(fn, m) {
+    try {
+      await fn();
+    } catch (e) {
+      return;
+    }
+    throw new Error(`rejects 失败: 未抛错 ${m || ''}`);
+  },
+};
+
+// 浏览器专属用例：Canvas → PNG → addSample → readSamplePixels 往返。
+async function pngRoundTrip(makeBackend) {
+  const ws = new Workspace(await makeBackend());
+  await ws.initialize();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 4;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(4, 4);
+  for (let i = 0; i < 16; i++) {
+    const v = i * 16;
+    img.data[i * 4] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const blob = await canvasToPngBlob(canvas);
+  assert.ok(blob instanceof Blob && blob.size > 0, 'canvasToPngBlob 应返回非空 Blob');
+
+  const id = await ws.addSample('train', '3', blob, { width: 4, height: 4, source: 'handwritten' });
+  const px = await ws.readSamplePixels('train', id);
+  assert.strictEqual(px.width, 4);
+  assert.strictEqual(px.height, 4);
+  assert.ok(px.data instanceof Uint8ClampedArray);
+  for (let i = 0; i < 16; i++) {
+    const v = i * 16;
+    const r = px.data[i * 4];
+    const g = px.data[i * 4 + 1];
+    const b = px.data[i * 4 + 2];
+    const a = px.data[i * 4 + 3];
+    // PNG 无损，允许 ±1 的解码容差
+    assert.ok(Math.abs(r - v) <= 1 && Math.abs(g - v) <= 1 && Math.abs(b - v) <= 1,
+      `像素 ${i} 灰度漂移: 期望 ${v}, 得到 (${r},${g},${b})`);
+    assert.strictEqual(a, 255);
+  }
+
+  // node 环境调用 readSamplePixels 应抛中文错（此处在浏览器中无法直接验证，
+  // 该分支由特性检测保证；浏览器路径已在上面覆盖）。
+  await ws.removeSample('train', id);
+}
+
+try {
+  main().catch((e) => {
+    document.title = JSON.stringify({
+      pass: 0,
+      fail: 1,
+      errors: [String((e && e.stack) || e)],
+    });
+  });
+} catch (e) {
+  document.title = JSON.stringify({
+    pass: 0,
+    fail: 1,
+    errors: [String((e && e.stack) || e)],
+  });
+}
+
+/**
+ * 主流程（包在 async 函数里：headless-shell 下模块顶层 await 会挂起，
+ * 必须避免 top-level await）。
+ */
+async function main() {
+  const root = await navigator.storage.getDirectory();
+  const created = [];
+  let n = 0;
+  const makeBackend = async () => {
+    const name = `ws-case-${Date.now()}-${n++}`;
+    created.push(name);
+    const handle = await root.getDirectoryHandle(name, { create: true });
+    return new DirHandleBackend(handle);
+  };
+
+  const result = await runWorkspaceSuite(makeBackend, assert);
+
+  try {
+    await pngRoundTrip(makeBackend);
+    result.pass += 1;
+  } catch (e) {
+    result.fail += 1;
+    result.errors.push(`PNG 编解码往返（浏览器）: ${e && e.message ? e.message : String(e)}`);
+  }
+
+  // 清理测试目录（尽力而为）
+  for (const name of created) {
+    try {
+      await root.removeEntry(name, { recursive: true });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  document.title = JSON.stringify({ pass: result.pass, fail: result.fail, errors: result.errors });
+}
+</script>
+</body>
+</html>
