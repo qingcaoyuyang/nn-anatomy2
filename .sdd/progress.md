@@ -32,6 +32,14 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
+## Task 10: implementation in progress
+- Task 10: implementer dispatched (neural network stage: stage.js + particles.js + app.js integration + smoke page).
+
+## Task 9: complete
+- Task 9: complete (commit 303bfb3, review APPROVED after fix round)
+- Controller verified: 46/46 node tests; smoke page {"pass":14,"fail":0}; desktop + guide screenshots reviewed clean.
+- Review follow-ups: 恢复按钮改 onclick 赋值（防重复挂载）+ 每次重入先解禁；boot() 加 catch；状态行 id 截短显示。
+
 ## Task 8: complete
 - Task 8: complete (commit 260596b, review APPROVED)
 - Controller verified: 46/46 green.
