@@ -32,11 +32,24 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
-## Task 4: implementation complete, review in progress
-- Task 4: implementer finished (commit ccb1d0b) — Rust 14/14 + JS 5/5 passing, cross-check max|Δ|=0 bit-identical.
-- Controller verified both suites green independently.
-- Implementer concern (authorized deviation): brief 说"双线性采样+2×2块平均"，实现改用质心保持的直接块平均（点采样会把单像素混叠掉，已验证），文档已在双份文件头写明。裁决：属 dispatch 时明确授权的"二选一"，评审按"文档是否精确一致 + 交叉验证是否通过"判定。
-- Reviewer dispatched; result pending. 无论评审结论如何，JS 半（`js/preprocess.js`）在新架构下沿用。
+## Task 6: complete
+- Task 6: complete (commit 0c81c19, review APPROVED)
+- Controller verified: `node --test tests/*.test.js` → 28/28 green; browser PNG codec page → {"pass":1,"fail":0}.
+- Review follow-ups (commit 6e7f0d4): saveModel JSON pretty-print (spec §3.2 可读性); id 加随机后缀防多实例碰撞 + 套件正则同步; workspace-opfs.html 补 IndexedDB 最近工作区用例（随真机 Chrome 跑）。
+- 缺口（诚实记录）: OPFS 真机验证 + IndexedDB 用例只能在用户 Mac 的真实 Chrome 跑，云端 headless-shell 的 storage 子系统不可用。
+
+## Task 5: complete
+- Task 5: complete (commit b00cfe9, review APPROVED — reviewer did independent line-by-line math verification: sign convention, mulberry32 canonical algorithm re-implemented in Python, Adam bias correction, flat layout)
+- Controller verified: `node --test tests/*.test.js` → 26/26 passing.
+- Review follow-up (commit c4be873): added `ADAM_DEFAULT_LR = 0.001` export; fixed rng test comment wording.
+- 流程备注：Node 24 下 `node --test tests/`（裸目录）报 MODULE_NOT_FOUND，后续任务验收一律用 `node --test tests/*.test.js` glob 形式。
+
+## Task 4: complete
+- Task 4: complete (commit ccb1d0b, review APPROVED)
+- Controller verified: Rust 14/14 + JS 5/5 passing; cross-check max|Δ|=0 bit-identical.
+- Review follow-up (commit b4a6ad8): added anti-aliasing regression guard to tests/preprocess.test.js — asserts the single-pixel pipeline output contains exactly one positive element (the (6,6) assertion alone would pass vacuously on all-zeros via the m=0 fallback). All 5 tests green.
+- Also fixed stale `../src/nn/preprocess.js` imports in both test files after the pivot reorg (moved to `js/`).
+- Note: only the JS half (`js/preprocess.js`) carries forward; Rust half archived.
 
 ## Task 2: complete
 - Task 2: complete (commits d8f58d4..6ed5083, review clean after fix round 1/5 — all findings addressed, no new breakage)

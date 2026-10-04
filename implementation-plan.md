@@ -90,7 +90,7 @@
 
 **Interfaces:**
 - Consumes: MNIST idx 文件（https://storage.googleapis.com/cvdf-datasets/mnist/，4 文件）
-- Produces: 28×28 灰度 PNG（原始手写图，预处理在加载时做）；dataset.js 负责入工作区
+- Produces: 13×13 灰度 PNG（导入时在 Python 端做重心居中 + 面积平均降采样；手写样本仍存 260×260 原图，加载时走 js/preprocess.js 标准管线）
 
 - [ ] **Step 1: 实现 tools/build-dataset.py**（PIL：解析 idx → 每类采样 → 写 PNG；固定采样 seed 保证可复现）
 - [ ] **Step 2: 运行生成** Run: python3 tools/build-dataset.py；抽查 PNG 可读且标签分布正确
