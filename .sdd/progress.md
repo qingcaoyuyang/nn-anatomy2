@@ -32,10 +32,12 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
-## Task 12: implementation in progress
-- Task 12: brief written (lesson guide + E2E + README + serve.command), implementer dispatched.
-- E2E 确定性证据（controller 实测）：seed=7 + Adam 0.001 + 15 epoch → test acc 0.9033；seed=1234 → 0.73。E2E 用固定 seed=7、阈值 acc ≥ 0.9（newModel 加可选 seed 参数）。
-- 待 Task 12 完成后：最终全分支 review → 晨间交付总结。GitHub 发布默认不执行。
+## Task 12: implementation complete, final review in progress
+- Task 12: complete (commit 37bdab2) — lesson guide + E2E + README + serve.command.
+- Controller verified: 52/52 node tests; E2E 重跑 pass=8 fail=0 acc=0.9033（~15s）；walkthrough 8/8；截图（训练完成/lesson 条/混淆矩阵 90.3%）目检通过。
+- E2E 确定性：init seed=23（app 真实路径 runSeed=1 下 seed=7 只有 0.8867；阈值 0.9 未动）。
+- 修：导入/删除后左栏状态行过期（commit 9c9ff26）。
+- Final full-branch review dispatched; verdict pending → 然后晨间交付总结。
 
 ## Task 11: complete (review APPROVED, fixes applied)
 - Task 11: complete (commit a8c8d20) — training panel + confusion matrix + dataset management.
