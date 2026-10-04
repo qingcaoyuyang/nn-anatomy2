@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>ui-task10 smoke</title>
+  <link rel="stylesheet" href="../../css/fonts.css" />
+  <link rel="stylesheet" href="../../css/app.css" />
+  <style>
+    body { margin: 0; background: #fff; display: flex; justify-content: center; padding: 16px; }
+    #stage { width: 640px; height: 420px; display: block; border: 1px solid #e7e5e4; border-radius: 12px; }
+  </style>
+</head>
+<body>
+  <canvas id="stage" width="640" height="420"></canvas>
+  <script type="module">
+    // —— rAF 垫片（仅测试环境）——
+    // 实测本环境的 headless-shell 在 --virtual-time-budget 下 rAF 只触发一次
+    // （探针页验证），无法驱动动画；故用 setTimeout 垫片代替帧泵。
+    // 产品在真实浏览器中走原生 rAF；动画逻辑（分段/缓动/粒子生成）走同一代码路径。
+    window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+    window.cancelAnimationFrame = (id) => clearTimeout(id);
+
+    import { createNetwork, backward } from '../../js/network.js';
+    import { inferWithTrace } from '../../js/trainer.js';
+    import { sgdStep } from '../../js/optimizer.js';
+    import { initStage } from '../../js/ui/stage.js';
+
+    const params = new URLSearchParams(location.search);
+    const shot = params.get('shot'); // null | 'inference' | 'training' | 'heatmap'
+    const results = { pass: 0, fail: 0, errors: [] };
+    const ok = (cond, name) => {
+      if (cond) { results.pass++; }
+      else { results.fail++; results.errors.push(name); }
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const argmax = (p) => {
+      let b = 0;
+      for (let i = 1; i < p.length; i++) if (p[i] > p[b]) b = i;
+      return b;
+    };
+
+    /** 取真实测试样本 7/000.png → 13×13 灰度 → 169 维输入（墨=1）。 */
+    async function loadX() {
+      const res = await fetch('../../data/sample-digits/test/7/000.png');
+      if (!res.ok) throw new Error('fetch 样本 PNG 失败: ' + res.status);
+      const bmp = await createImageBitmap(await res.blob());
+      const c = document.createElement('canvas');
+      c.width = 13; c.height = 13;
+      const g = c.getContext('2d');
+      g.drawImage(bmp, 0, 0, 13, 13);
+      const d = g.getImageData(0, 0, 13, 13).data;
+      const x = new Array(169);
+      for (let i = 0; i < 169; i++) x[i] = 1 - d[i * 4] / 255; // 白纸黑字 → 墨=1
+      return x;
+    }
+
+    async function main() {
+      try {
+        // 等字体就绪（canvas 中文标注尽量用上 Noto Sans SC），最多等 3s
+        await Promise.race([document.fonts.ready, sleep(3000)]);
+
+        const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 7);
+        const canvas = document.getElementById('stage');
+        const stage = initStage(canvas, net);
+        window.__stage = stage; // 调试图柄
+
+        const api = ['setNet', 'render', 'playInference', 'playTrainingStep', 'highlightNode'];
+        ok(api.every((k) => typeof stage[k] === 'function'), 'initStage 返回 5 个 API 方法');
+
+        const x = await loadX();
+        ok(x.length === 169, '样本 x 为 169 维');
+        ok(x.some((v) => v > 0.5), '样本含墨迹（存在 >0.5 的像素）');
+
+        // —— 截图模式：跑到动画中段冻结 ——
+        if (shot === 'inference') {
+          stage.playInference(x);
+          await sleep(300);
+          ok(stage._freeze() === true, '冻结推理动画中段');
+          document.title = JSON.stringify({ shot, ...results });
+          return;
+        }
+
+        // —— 推理 ——
+        const trace = await stage.playInference(x);
+        ok(trace && trace.p.length === 10, 'playInference resolve 出 trace（10 维 p）');
+        ok(Math.abs(trace.p.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'p 求和为 1');
+        ok(trace.pred === argmax(trace.p), 'pred = argmax(p)');
+        ok(stage.lastTrace === trace, 'stage.lastTrace 暴露本次 trace');
+
+        // 重入：动画进行中再次调用返回同一 Promise
+        const p1 = stage.playInference(x);
+        const p2 = stage.playInference(x);
+        ok(p1 === p2, '重入 playInference 返回同一 Promise');
+        const t2 = await p1;
+        ok(t2.pred === argmax(t2.p), '重入的 Promise 同样 resolve 出合法 trace');
+
+        // —— 训练步：一次真实 sgdStep 的 before/after ——
+        const beforeTrace = inferWithTrace(net, x);
+        const before = { trace: beforeTrace, w1: net.w1.slice(), w2: net.w2.slice(), y: 7 };
+        sgdStep(net, backward(net, x, 7, beforeTrace), 0.5);
+        const afterTrace = inferWithTrace(net, x);
+        const after = { trace: afterTrace, w1: net.w1.slice(), w2: net.w2.slice(), y: 7 };
+        let maxDw = 0;
+        for (let i = 0; i < net.w1.length; i++) {
+          maxDw = Math.max(maxDw, Math.abs(net.w1[i] - before.w1[i]));
+        }
+        ok(maxDw > 0, 'sgdStep 确实更新了权重（max|Δw|>0）');
+        await stage.playTrainingStep(before, after);
+        ok(stage.lastTrace === afterTrace, '训练步后 lastTrace 更新为 after');
+
+        // —— 高亮节点 ——
+        stage.highlightNode('hidden', 3);
+        ok(true, 'highlightNode(hidden,3) 不抛错');
+        stage.highlightNode('hidden', 3); // 再点一次取消
+        ok(true, 'highlightNode 再次调用（取消）不抛错');
+        let threw = false;
+        try { stage.highlightNode('foo', 0); } catch (e) { threw = true; }
+        ok(threw, 'highlightNode 非法 layer 抛错');
+        threw = false;
+        try { stage.highlightNode('hidden', 99); } catch (e) { threw = true; }
+        ok(threw, 'highlightNode 越界下标抛错');
+
+        // —— 截图模式：训练中段 / 热力图 ——
+        if (shot === 'training') {
+          stage.playTrainingStep(before, after);
+          await sleep(450);
+          ok(stage._freeze() === true, '冻结训练动画中段');
+          document.title = JSON.stringify({ shot, ...results });
+          return;
+        }
+        if (shot === 'heatmap') {
+          stage.highlightNode('hidden', 3);
+          document.title = JSON.stringify({ shot, ...results });
+          return;
+        }
+      } catch (e) {
+        results.fail++;
+        results.errors.push('异常：' + (e && e.message ? e.message : String(e)));
+      }
+      document.title = JSON.stringify(results);
+    }
+
+    main();
+  </script>
+</body>
+</html>

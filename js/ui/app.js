@@ -14,6 +14,8 @@ import {
   canvasToPngBlob,
 } from '../workspace.js';
 import { initDrawing, BOARD_SIZE } from './drawing.js';
+import { initStage } from './stage.js';
+import { createNetwork } from '../network.js';
 
 /** 调试句柄（生产保留，无害）。 */
 const debugHandle = { workspace: null, drawing: null, boot, label: null };
@@ -201,19 +203,12 @@ export async function boot({ workspaceBackend } = {}) {
   };
   $('btn-save').addEventListener('click', saveSample);
 
-  // —— 中栏：舞台占位（Task 10 实现） ——
-  const drawStagePlaceholder = () => {
-    const stage = $('stage');
-    const sctx = stage.getContext('2d');
-    sctx.fillStyle = '#f5f5f4';
-    sctx.fillRect(0, 0, stage.width, stage.height);
-    sctx.fillStyle = '#a8a29e';
-    sctx.font = '28px "Noto Sans SC", sans-serif';
-    sctx.textAlign = 'center';
-    sctx.textBaseline = 'middle';
-    sctx.fillText('舞台加载中（Task 10 实现）', stage.width / 2, stage.height / 2);
-  };
-  drawStagePlaceholder();
+  // —— 中栏：神经网络舞台（Task 10） ——
+  // 网络与舞台实例挂在 debugHandle 上，供训练面板（Task 11）与教学引导（Task 12）复用。
+  const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 7);
+  const stage = initStage($('stage'), net);
+  debugHandle.net = net;
+  debugHandle.stage = stage;
 
   // —— 工作区装配 ——
   const setWorkspace = async (ws) => {
