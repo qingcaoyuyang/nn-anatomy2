@@ -32,6 +32,11 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
+## Task 8: complete
+- Task 8: complete (commit 260596b, review APPROVED)
+- Controller verified: 46/46 green.
+- Review follow-up (commit 8099d63): trainEpochs 对非整数 epochs 做 floor（之前会虚报 epochsDone）。
+
 ## Task 7: complete
 - Task 7: complete (commit a25e83b, review APPROVED)
 - Controller verified: 33/33 tests; 1300 PNGs on disk, per-class counts correct; PIL spot-checks 13×13 'L'.
