@@ -92,8 +92,9 @@ function toGray(data) {
  * @param {string} source manifest 中的来源字段
  * @returns {Array|Float64Array} 169 个 0~1
  * @throws 未知来源或 mnist-import 尺寸不是 13×13 时抛错（调用方按损坏样本跳过）
+ * （导出以便 node 测试覆盖手写 260×260 解码链路；loadSamples 在浏览器里调它。）
  */
-function decodeSamplePixels(data, width, height, source) {
+export function decodeSamplePixels(data, width, height, source) {
   const gray = toGray(data);
   if (source === 'mnist-import') {
     if (width !== 13 || height !== 13 || gray.length !== 169) {
