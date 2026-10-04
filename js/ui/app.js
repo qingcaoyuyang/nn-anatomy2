@@ -378,9 +378,13 @@ export async function boot({ workspaceBackend } = {}) {
     if (Number.isFinite(lr) && lr > 0) model.lr = lr;
   }
 
-  /** 样本变更（导入/删除）后：刷新计数 + 面板重评。 */
+  /** 样本变更（导入/删除）后：刷新计数 + 状态行 + 面板重评。 */
   async function notifySamplesChanged() {
     updateKv();
+    const ws = debugHandle.workspace;
+    if (ws) {
+      setStatus(`数据集已更新：训练集 ${ws.listSamples('train').length} 个样本，测试集 ${ws.listSamples('test').length} 个样本。`);
+    }
     if (panelApi) await panelApi.onSamplesChanged();
   }
 
