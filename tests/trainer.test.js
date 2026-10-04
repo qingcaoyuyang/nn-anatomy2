@@ -213,3 +213,27 @@ test('inferWithTrace：返回全部中间值 + pred = argmax p', () => {
   assert.strictEqual(t.pred, best);
   assert.ok(Number.isInteger(t.pred) && t.pred >= 0 && t.pred <= 9);
 });
+
+test('分块训练等价性：3×{epochs:1,startEpoch:k} ≡ {epochs:3}（权重 bit-identical）', () => {
+  const data = makeSyntheticData(5);
+  const netA = createNetwork(ARCH, 7);
+  const netB = createNetwork(ARCH, 7);
+  const optA = createOptState(netA, 'adam');
+  const optB = createOptState(netB, 'adam');
+  trainEpochs(netA, optA, data, { epochs: 3, seed: 42 });
+  const seenEpochs = [];
+  for (let k = 0; k < 3; k++) {
+    trainEpochs(netB, optB, data, {
+      epochs: 1, seed: 42, startEpoch: k,
+      onEpoch: (epoch) => { seenEpochs.push(epoch); },
+    });
+  }
+  assert.deepStrictEqual(seenEpochs, [1, 2, 3]);
+  assert.deepStrictEqual(netA.w1, netB.w1);
+  assert.deepStrictEqual(netA.b1, netB.b1);
+  assert.deepStrictEqual(netA.w2, netB.w2);
+  assert.deepStrictEqual(netA.b2, netB.b2);
+  assert.deepStrictEqual(optA.m, optB.m);
+  assert.deepStrictEqual(optA.v, optB.v);
+  assert.strictEqual(optA.t, optB.t);
+});

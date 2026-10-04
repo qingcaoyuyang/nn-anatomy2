@@ -15,7 +15,7 @@
  *
  * # 确定性契约
  * 每个 epoch 用独立 seed 流做 Fisher–Yates shuffle：
- * `createRng(seed * 100003 + epoch)`（seed 先经 createRng 截断到 u32）。
+ * `createRng(seed * 100003 + startEpoch + epoch)`（seed 先经 createRng 截断到 u32）。
  * 同 seed + 同初始网络 + 同样本顺序 ⇒ 两次 trainEpochs 权重 bit-identical。
  */
 
@@ -82,10 +82,16 @@ function currentMetrics(net, samples) {
  * @param {object|null} optState 优化器状态（createOptState 产物；sgd 传 null）
  * @param {Array<{x:number[169], y:number}>} samples 已预处理的样本
  * @param {object} opts { epochs=1, lr=ADAM_DEFAULT_LR, optimizer='adam'|'sgd',
- *                        seed=1, onEpoch }
+ *                        seed=1, startEpoch=0, onEpoch }
  * @returns {{ epochsDone:number, logLikelihood:number|null, cancelled:boolean }}
  *   logLikelihood 为最终网络的平均对数似然；空样本/epochs<=0 时直接返回
  *   { epochsDone: 0, logLikelihood: null, cancelled: false }。
+ *
+ * # startEpoch（供 UI 分块训练）
+ * UI 若需每 epoch 让出主线程保持可交互，可循环调用
+ * `trainEpochs(net, st, samples, { epochs: 1, seed, startEpoch: k })`（k=0,1,2…）。
+ * startEpoch 会叠加进 seed 流与 onEpoch 的 epoch 编号，保证分块调用与一次
+ * `trainEpochs({ epochs: N })` 的 shuffle 序列、指标编号完全一致。
  */
 export function trainEpochs(net, optState, samples, opts = {}) {
   const {
@@ -93,6 +99,7 @@ export function trainEpochs(net, optState, samples, opts = {}) {
     lr = ADAM_DEFAULT_LR,
     optimizer = 'adam',
     seed = 1,
+    startEpoch = 0,
     onEpoch,
   } = opts;
 
@@ -110,14 +117,15 @@ export function trainEpochs(net, optState, samples, opts = {}) {
   }
 
   for (let epoch = 1; epoch <= epochs; epoch++) {
+    const globalEpoch = startEpoch + epoch;
     // 门控：本 epoch 开始前先给 UI 一次"看指标、决定是否继续"的机会
     const metrics = currentMetrics(net, samples);
-    if (onEpoch && onEpoch(epoch, metrics) === false) {
+    if (onEpoch && onEpoch(globalEpoch, metrics) === false) {
       return { epochsDone: epoch - 1, logLikelihood: metrics.logLikelihood, cancelled: true };
     }
 
-    // 独立 seed 流的 shuffle，保证同 seed 完全可复现
-    const rng = createRng(seed * 100003 + epoch);
+    // 独立 seed 流的 shuffle，保证同 (seed, startEpoch) 完全可复现
+    const rng = createRng(seed * 100003 + globalEpoch);
     const order = shuffledIndices(n, rng);
     for (const i of order) {
       const s = samples[i];
