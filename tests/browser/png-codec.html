@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>running…</title>
+</head>
+<body>
+<script type="module">
+/**
+ * PNG 编解码往返验证（headless-shell 可跑，无需 storage）。
+ * 镜像 js/workspace.js 里 canvasToPngBlob（编码）与
+ * readSamplePixels（createImageBitmap 解码）的真实路径。
+ */
+import { canvasToPngBlob } from '../../js/workspace.js';
+
+async function main() {
+  // 4×4 已知灰度图
+  const src = document.createElement('canvas');
+  src.width = 4; src.height = 4;
+  const sctx = src.getContext('2d');
+  const img = sctx.createImageData(4, 4);
+  const expected = [];
+  for (let i = 0; i < 16; i++) {
+    const v = (i * 37) % 256;
+    expected.push(v);
+    img.data[i * 4] = v; img.data[i * 4 + 1] = v; img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255;
+  }
+  sctx.putImageData(img, 0, 0);
+
+  // 编码：走生产代码 canvasToPngBlob
+  const blob = await canvasToPngBlob(src);
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error('toBlob 未产出 PNG');
+
+  // 解码：镜像 readSamplePixels 的 createImageBitmap → canvas → getImageData 路径
+  const bitmap = await createImageBitmap(blob);
+  try {
+    if (bitmap.width !== 4 || bitmap.height !== 4) throw new Error(`解码尺寸错误：${bitmap.width}×${bitmap.height}`);
+    const dst = document.createElement('canvas');
+    dst.width = 4; dst.height = 4;
+    const dctx = dst.getContext('2d', { willReadFrequently: true });
+    dctx.drawImage(bitmap, 0, 0);
+    const out = dctx.getImageData(0, 0, 4, 4).data;
+    for (let i = 0; i < 16; i++) {
+      const v = out[i * 4];
+      if (v !== expected[i]) throw new Error(`像素 ${i} 往返不一致：${v} !== ${expected[i]}`);
+      if (out[i * 4 + 3] !== 255) throw new Error(`像素 ${i} alpha 丢失`);
+    }
+  } finally {
+    if (typeof bitmap.close === 'function') bitmap.close();
+  }
+
+  document.title = JSON.stringify({ pass: 1, fail: 0, errors: [] });
+}
+
+main().catch((e) => {
+  document.title = JSON.stringify({ pass: 0, fail: 1, errors: [String((e && e.stack) || e)] });
+});
+</script>
+</body>
+</html>
