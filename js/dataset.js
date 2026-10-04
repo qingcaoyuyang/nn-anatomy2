@@ -87,8 +87,8 @@ function toGray(data) {
 /**
  * 按来源极性把像素解码为 169 维"墨=1"输入。
  * @param {Uint8ClampedArray} data RGBA 像素
- * @param {number} width 高度
- * @param {number} height 宽度
+ * @param {number} width 宽度
+ * @param {number} height 高度
  * @param {string} source manifest 中的来源字段
  * @returns {Array|Float64Array} 169 个 0~1
  * @throws 未知来源或 mnist-import 尺寸不是 13×13 时抛错（调用方按损坏样本跳过）
@@ -136,7 +136,11 @@ export async function loadSamples(workspace, split) {
     try {
       const { data, width, height } = await workspace.readSamplePixels(split, entry.id);
       const x = decodeSamplePixels(data, width, height, entry.source);
-      out.push({ x, y: Number(entry.label), id: entry.id });
+      const y = Number(entry.label);
+      if (!Number.isInteger(y) || y < 0 || y > 9) {
+        throw new Error(`标签非法：${entry.label}（应为 0~9 整数）。`);
+      }
+      out.push({ x, y, id: entry.id });
     } catch (e) {
       console.warn(`跳过损坏样本 ${entry.id}：`, e && e.message ? e.message : e);
     }

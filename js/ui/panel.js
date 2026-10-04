@@ -219,6 +219,7 @@ export function initPanel(root, api) {
     try {
       await api.loadModel(modelSelect.value);
       await refresh();
+      pausedState = null; // 暂停态属于旧模型，切模型后丢弃
       setTrainStatus(`已切换到模型「${modelSelect.value}」。`);
     } catch (e) {
       setTrainStatus(`切换模型失败：${e && e.message ? e.message : e}`);
@@ -247,6 +248,7 @@ export function initPanel(root, api) {
     try {
       await api.deleteModel(m.name);
       await refresh();
+      pausedState = null; // 当前模型已删，暂停态一并丢弃
       setTrainStatus(`已删除模型「${m.name}」。`);
     } catch (e) {
       setTrainStatus(`删除模型失败：${e && e.message ? e.message : e}`);
@@ -587,7 +589,7 @@ export function initPanel(root, api) {
       const done = await runEpochs(m, samples, seed, total, 1);
       trainRun.done = done;
       if (trainRun.paused) {
-        pausedState = { total, done, seed };
+        pausedState = { total, done, seed, modelName: m.name };
         setTrainStatus(`已暂停：完成 ${done}/${total} 轮。点击「继续」接着训练。`);
         setButtons(false, false, true);
         setControlsEnabled(true); // 暂停时允许调学习率/优化器再继续
@@ -623,8 +625,14 @@ export function initPanel(root, api) {
     const ws = api.getWorkspace();
     const m = api.getModel();
     if (!ws || !m || !m.net) return;
-    const { total, done, seed } = pausedState;
+    const { total, done, seed, modelName } = pausedState;
     pausedState = null;
+    if (modelName !== m.name) {
+      // 暂停期间切换了模型：旧 run 的 seed/轮次不能套用到新模型
+      setTrainStatus(`暂停的训练属于模型「${modelName}」，当前是「${m.name}」，已丢弃暂停态。请重新开始训练。`);
+      setButtons(true, false, false);
+      return;
+    }
     let samples = [];
     try {
       samples = await loadSamples(ws, 'train');
@@ -647,7 +655,7 @@ export function initPanel(root, api) {
       const newDone = await runEpochs(m, samples, seed, total, done + 1);
       trainRun.done = newDone;
       if (trainRun.paused) {
-        pausedState = { total, done: newDone, seed };
+        pausedState = { total, done: newDone, seed, modelName: m.name };
         setTrainStatus(`已暂停：完成 ${newDone}/${total} 轮。点击「继续」接着训练。`);
         setButtons(false, false, true);
         setControlsEnabled(true);
@@ -688,6 +696,7 @@ export function initPanel(root, api) {
     const m = api.getModel();
     const stage = api.getStage();
     if (!m || !m.net || !stage) return;
+    if (trainRun) return; // 与批量训练互斥：训练中不接受单步
     if (singleStepBusy) return; // 防重入：上一步动画未完成时跳过
     singleStepBusy = true;
     try {
