@@ -104,7 +104,8 @@ export function trainEpochs(net, optState, samples, opts = {}) {
   } = opts;
 
   const n = samples.length;
-  if (n === 0 || epochs <= 0) {
+  const epochsInt = Math.floor(epochs);
+  if (n === 0 || epochsInt <= 0) {
     return { epochsDone: 0, logLikelihood: null, cancelled: false };
   }
 
@@ -116,7 +117,7 @@ export function trainEpochs(net, optState, samples, opts = {}) {
     throw new Error('adam 需要 optState（用 createOptState(net, "adam") 创建）');
   }
 
-  for (let epoch = 1; epoch <= epochs; epoch++) {
+  for (let epoch = 1; epoch <= epochsInt; epoch++) {
     const globalEpoch = startEpoch + epoch;
     // 门控：本 epoch 开始前先给 UI 一次"看指标、决定是否继续"的机会
     const metrics = currentMetrics(net, samples);
@@ -137,7 +138,7 @@ export function trainEpochs(net, optState, samples, opts = {}) {
   }
 
   const finalMetrics = currentMetrics(net, samples);
-  return { epochsDone: epochs, logLikelihood: finalMetrics.logLikelihood, cancelled: false };
+  return { epochsDone: epochsInt, logLikelihood: finalMetrics.logLikelihood, cancelled: false };
 }
 
 /**
