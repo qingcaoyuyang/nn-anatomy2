@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { preprocess } from '../src/nn/preprocess.js';
+import { preprocess } from '../js/preprocess.js';
 
 // 与 Rust 测试 write_crosscheck_fixture 完全同公式的合成图生成器。
 function makeImage(name, w, h) {

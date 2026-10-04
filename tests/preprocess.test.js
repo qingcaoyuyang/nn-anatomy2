@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { centerOfMass, resampleTo13, preprocess } from '../src/nn/preprocess.js';
+import { centerOfMass, resampleTo13, preprocess } from '../js/preprocess.js';
 
 const W = 260;
 const H = 260;
@@ -37,6 +37,11 @@ test('single bright pixel: center of mass = pixel coords', () => {
 test('centered + downsampled: center of mass ≈ (6,6) on 13×13 grid', () => {
   const out = resampleTo13(singlePixel(), W, H);
   assert.strictEqual(out.length, 169);
+  // 回归 guard：单亮点经管线后必须恰好留下一个正值。
+  // 若降采样把亮点混叠丢了，centerOfMass 的 m=0 fallback 会恰好返回 (6,6)，
+  // 让下面的断言"空"通过——这个计数断言把那种静默退化锁死。
+  const positive = out.filter((v) => v > 0).length;
+  assert.strictEqual(positive, 1, `single pixel should survive resampling, got ${positive} positive elements`);
   const [cx, cy] = centerOfMass(out, 13, 13);
   assert.ok(Math.abs(cx - 6) < 1e-6, `cx should be ≈ 6, got ${cx}`);
   assert.ok(Math.abs(cy - 6) < 1e-6, `cy should be ≈ 6, got ${cy}`);
