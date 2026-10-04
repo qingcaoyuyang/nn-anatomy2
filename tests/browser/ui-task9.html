@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ui-task9 smoke</title>
+  <link rel="stylesheet" href="../../css/fonts.css" />
+  <link rel="stylesheet" href="../../css/app.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import { boot } from '../../js/ui/app.js';
+    import { MemoryBackend } from '../../js/workspace.js';
+
+    const results = { pass: 0, fail: 0, errors: [] };
+    const ok = (cond, name) => {
+      if (cond) { results.pass++; }
+      else { results.fail++; results.errors.push(name); }
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    /** 在画板上合成一笔（画一个"7"）。 */
+    function drawSeven(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const mk = (type, x, y) => new PointerEvent(type, {
+        clientX: rect.left + x * (rect.width / 260),
+        clientY: rect.top + y * (rect.height / 260),
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        isPrimary: true,
+      });
+      canvas.dispatchEvent(mk('pointerdown', 60, 40));
+      canvas.dispatchEvent(mk('pointermove', 130, 40));
+      canvas.dispatchEvent(mk('pointermove', 200, 40));
+      canvas.dispatchEvent(mk('pointermove', 150, 130));
+      canvas.dispatchEvent(mk('pointermove', 110, 220));
+      canvas.dispatchEvent(mk('pointerup', 110, 220));
+    }
+
+    async function main() {
+      try {
+        await boot({ workspaceBackend: new MemoryBackend() });
+
+        // 等待 workspace 就绪
+        let ws = null;
+        for (let i = 0; i < 100; i++) {
+          ws = window.__nnanatomy && window.__nnanatomy.workspace;
+          if (ws) break;
+          await sleep(50);
+        }
+        ok(!!ws, 'workspace 就绪（window.__nnanatomy.workspace）');
+        if (!ws) { document.title = JSON.stringify(results); return; }
+
+        // 传入 backend 时应跳过引导遮罩
+        ok(document.getElementById('ws-guide').classList.contains('hidden'), '引导遮罩已隐藏');
+
+        // 三栏骨架存在
+        ok(!!document.querySelector('.panel-left'), '左栏存在');
+        ok(!!document.getElementById('stage'), '中栏舞台 canvas 存在');
+        ok(!!document.querySelector('.panel-right'), '右栏存在');
+
+        // 画一笔
+        const board = document.getElementById('board');
+        drawSeven(board);
+        const px = window.__nnanatomy.drawing.getPixels13();
+        ok(px.length === 169, 'getPixels13 返回 169 个值');
+        ok(Array.from(px).every((v) => v >= 0 && v <= 1), '像素值都在 [0,1]');
+        ok(Array.from(px).some((v) => v > 0.05), '有墨迹（存在正值）');
+
+        // 13×13 预览非空
+        const prev = document.getElementById('preview13').getContext('2d')
+          .getImageData(0, 0, 13, 13).data;
+        let dark = 0;
+        for (let i = 0; i < 169; i++) if (prev[i * 4] < 200) dark++;
+        ok(dark > 0, '13×13 预览有墨迹');
+
+        // 选标签 7 并保存
+        document.querySelector('[data-label="7"]').click();
+        ok(window.__nnanatomy.label === '7', '标签切换为 7');
+        document.getElementById('btn-save').click();
+        let samples = [];
+        for (let i = 0; i < 100; i++) {
+          samples = ws.listSamples('train');
+          if (samples.length >= 1) break;
+          await sleep(50);
+        }
+        ok(samples.length === 1, 'manifest 新增 1 条样本');
+        ok(samples[0] && samples[0].source === 'handwritten', "样本 source='handwritten'");
+        ok(samples[0] && samples[0].label === '7', '样本 label=7');
+        ok(document.getElementById('status').textContent.includes('已保存样本'),
+          '状态行显示"已保存样本"');
+      } catch (e) {
+        results.fail++;
+        results.errors.push('异常：' + (e && e.message ? e.message : String(e)));
+      }
+      document.title = JSON.stringify(results);
+    }
+
+    main();
+  </script>
+</body>
+</html>
