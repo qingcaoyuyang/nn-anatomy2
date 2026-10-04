@@ -1,1 +1,51 @@
 # SDD ledger — plan: /home/hatch/workspace/nn-anatomy2/implementation-plan.md
+
+## Pre-flight conflict scan (2026-10-04, controller)
+
+| # | Conflict | Ruling |
+|---|---|---|
+| 1 | Plan paths reference /Users/juewei/... (Mac); user said dir "nn-anatomy2" in cloud, plan says "nn-anatomy/" | Ruling: use ~/workspace/nn-anatomy2 — user's explicit name wins. Cost if wrong: rename later, cheap. |
+| 2 | Task 1: `cargo install tauri-cli` + `cargo tauri dev` cannot run on headless Linux VM (no display, no WebKitGTK) | Ruling: restructure Rust as `nn-core` lib crate (pure computation, no tauri dep) + `src-tauri` bin crate (Tauri shell). Verify nn-core with `cargo test`; Tauri GUI compile/run deferred to user's Mac. Skip tauri-cli install here. Cost if wrong: none for logic; GUI wiring verified on Mac. |
+| 3 | Task 1 Step 4: `cargo tauri icon` needs tauri-cli | Ruling: generate placeholder 1024px icon via script now; regenerate with `cargo tauri icon` on Mac. |
+| 4 | Task 12 Step 4: `gh repo create --public --push` — publish side effect outside worktree | Ruling: ASK USER before sleeping; default = do NOT publish. |
+| 5 | Task 7 needs MNIST idx files | Ruling: download from https://storage.googleapis.com/cvdf-datasets/mnist/ (4 files). Fallback: alternate mirror. |
+| 6 | Task 5 Step 4b: JS/Rust weight diff < 1e-9 needs bit-identical RNG + op order | Ruling: both engines must implement mulberry32 + Box-Muller identically (plan mandates); emphasized in Task 2/5 briefs. Test with fixed seed=42, 20 samples, 3 epochs. |
+| 7 | Global constraint: fonts local (Baloo 2 + Noto Sans SC + mono) | Ruling: download woff2 (Baloo 2, Noto Sans SC Regular/Bold, mono=system ui-monospace fallback + bundled if small). |
+| 8 | Tasks 9-12 "browser acceptance" | Ruling: verify with headless Chromium screenshots + stubbed window.__TAURI__ bridge; real Tauri WebView check on Mac. |
+
+## Task 1: complete
+- Task 1: complete (commits f3b688c..d8f58d4, review clean)
+- Controller verified: `cargo test -p nn-core` 1/1 passing; icon.png is 1024x1024 RGB on disk.
+- Task 1: minor (deferred): tauri.conf.json single-line minified, no trailing newline — pretty-print later.
+- Task 1: minor (deferred): src-tauri/Cargo.toml has unused `tempdir` optional dependency — remove or wire when first used.
+- Task 1: minor (deferred): nn-core/Cargo.toml empty [dependencies] section — remove until Task 2 adds serde.
+- Task 1: minor (deferred): empty dirs src/nn, tests, scripts not tracked — add .gitkeep or let Task 2+ populate.
+- Ruling: commit Cargo.lock for the binary workspace before final review (standard practice for applications) — cost if wrong: none, easily reverted.
+- Ruling: src-tauri `cargo check` deferred to user's Mac (WebKitGTK missing on this VM) — recorded in Task 1 report.
+
+## PIVOT 裁决（2026-10-04 深夜，用户决策：按建议切换到纯浏览器 + File System Access API）
+
+- Tauri 2 方案停止。`nn-core/`、`src-tauri/`、`Cargo.toml`、`Cargo.lock`、`src/main.js`、`src/tauri-bridge.js` 已 `git mv` 到 `archive/tauri-v1/`（历史保留，附 NOTE.md）；`target/` 已删除（gitignored 构建产物）。
+- 保留沿用：`js/preprocess.js`（Task 4 JS 实现）、`css/app.css`、`index.html`（路径已更新）。
+- 作废：旧 Task 5（JS↔Rust 双引擎一致性 <1e-9）——单引擎无需交叉验证；旧 Task 1 的"Mac 上 cargo check Tauri"、旧 Task 12 的 GitHub 发布默认不做（等用户确认）。
+- 新计划：implementation-plan.md 已重写为 Task 5–12（纯浏览器）。旧 brief 只有 1–4，无需归档。
+- 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
+- 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
+
+## Task 4: implementation complete, review in progress
+- Task 4: implementer finished (commit ccb1d0b) — Rust 14/14 + JS 5/5 passing, cross-check max|Δ|=0 bit-identical.
+- Controller verified both suites green independently.
+- Implementer concern (authorized deviation): brief 说"双线性采样+2×2块平均"，实现改用质心保持的直接块平均（点采样会把单像素混叠掉，已验证），文档已在双份文件头写明。裁决：属 dispatch 时明确授权的"二选一"，评审按"文档是否精确一致 + 交叉验证是否通过"判定。
+- Reviewer dispatched; result pending. 无论评审结论如何，JS 半（`js/preprocess.js`）在新架构下沿用。
+
+## Task 2: complete
+- Task 2: complete (commits d8f58d4..6ed5083, review clean after fix round 1/5 — all findings addressed, no new breakage)
+- Ruling (load-bearing, Task 3/5 must follow): Task 2's `backward` returns gradients of LOG-LIKELIHOOD ln(p[y]) (dz2 = onehot − p), NOT cross-entropy loss gradients. Optimizer steps must ASCEND: param += lr·g (equivalent to CE descent). Documented in nn-core/src/nn/network.rs header + backward docstring.
+- Ruling: RNG bit-identity contract scoped — exact bit-identity guaranteed only through next_f64 (mulberry32 int stream + u32→f64/2^32); ln/cos may differ 1–2 ulp across Rust libm vs V8; Task 5 must compare with tolerance (< 1e-9 budget covers it). u1==0 intentionally unhandled in next_normal — JS must mirror, not "fix".
+
+## Task 3: complete
+- Task 3: complete (commits 6ed5083..8d371a3, review clean)
+- Controller verified: `cargo test -p nn-core` 9/9 passing.
+- Task 3: minor (deferred): no DEFAULT_LR constant — add `pub const DEFAULT_LR: f64 = 0.001` with Adam constants later.
+- Task 3: minor (deferred): AdamState fields fully pub — consider pub(crate) later.
+- Ruling: sign convention reaffirmed — optimizers ASCEND log-likelihood (param += lr·g); Task 5 JS and Task 8 Rust must use the same convention.
