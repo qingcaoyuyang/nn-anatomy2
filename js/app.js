@@ -3,4 +3,4 @@
  */
 import { boot } from './ui/app.js';
 
-boot();
+boot().catch((e) => console.error('[nn-anatomy2] 启动失败：', e));

@@ -190,7 +190,7 @@ export async function boot({ workspaceBackend } = {}) {
       });
       const n = ws.listSamples('train').length;
       $('kv-train-count').textContent = String(n);
-      setStatus(`已保存样本 #${id}（标签 ${currentLabel}，训练集共 ${n} 个）`);
+      setStatus(`已保存样本 #…${id.slice(-6)}（标签 ${currentLabel}，训练集共 ${n} 个）`);
       drawing.clear();
       refreshPreview();
     } catch (e) {
@@ -267,12 +267,15 @@ export async function boot({ workspaceBackend } = {}) {
   /** 恢复最近工作区（IndexedDB 存的 handle）。失败则静默隐藏恢复按钮。 */
   const tryOfferResume = async () => {
     const resumeBtn = $('ws-resume');
+    resumeBtn.disabled = false; // 每次重新提供恢复入口时先解禁（避免上次成功后永久灰色）
     try {
       const handle = await loadRecentHandle();
       if (!handle || typeof handle.name !== 'string') return;
       resumeBtn.textContent = `继续使用上次的「${handle.name}」`;
       resumeBtn.classList.remove('hidden');
-      resumeBtn.addEventListener('click', async () => {
+      // 用 onclick 赋值而非 addEventListener：tryOfferResume 可能被多次调用，
+      // 赋值语义保证同一时刻只有一个 handler，不会重复挂载。
+      resumeBtn.onclick = async () => {
         clearGuideError();
         resumeBtn.disabled = true;
         try {
@@ -284,7 +287,7 @@ export async function boot({ workspaceBackend } = {}) {
           showGuideError(`恢复失败：${e && e.message ? e.message : e}，请重新选择文件夹。`);
           resumeBtn.disabled = false;
         }
-      });
+      };
     } catch (e) {
       // IndexedDB 不可用（如无头测试环境）：不提供恢复入口
     }
