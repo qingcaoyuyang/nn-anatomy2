@@ -20,9 +20,15 @@ import { createOptState } from '../trainer.js';
 import { ADAM_DEFAULT_LR, paramCount } from '../optimizer.js';
 import { initPanel, uniqueModelName } from './panel.js';
 import { initDatasetViewer } from './dataset-viewer.js';
+import { initLesson } from './lesson.js';
 
 /** 调试句柄（生产保留，无害）。 */
 const debugHandle = { workspace: null, drawing: null, boot, label: null, panel: null, viewer: null };
+
+/** 教学引导事件投递（lesson 未初始化时静默）。 */
+function notifyLesson(evt) {
+  if (lessonApi) lessonApi.notify(evt);
+}
 
 /** 当前模型状态（Task 11）：训练面板与左栏单步训练共享的唯一可变状态。 */
 const ARCH = { inputs: 169, hidden: 16, outputs: 10 };
@@ -41,6 +47,7 @@ const model = {
 let currentLabel = '0';
 let panelApi = null;
 let viewerApi = null;
+let lessonApi = null;
 
 /** 工作区显示名：真实目录用 handle.name，内存后端用固定名。 */
 function workspaceDisplayName(workspace) {
@@ -72,6 +79,12 @@ export async function boot({ workspaceBackend } = {}) {
     </div>`;
   app.appendChild(topbar);
 
+  // —— 教学引导条（Task 12） ——
+  const lessonBar = document.createElement('div');
+  lessonBar.className = 'lesson-bar';
+  lessonBar.id = 'lesson-bar';
+  app.appendChild(lessonBar);
+
   // —— 三栏主体 ——
   const main = document.createElement('main');
   main.className = 'layout';
@@ -96,6 +109,10 @@ export async function boot({ workspaceBackend } = {}) {
     <section class="card panel-center" aria-label="神经网络舞台">
       <h2 class="card-title">神经网络舞台</h2>
       <canvas id="stage" class="stage" width="640" height="420"></canvas>
+      <div class="btn-row stage-actions">
+        <button class="btn btn-secondary" id="btn-infer" type="button">▶ 推理</button>
+        <span class="infer-hint">用当前画板内容跑一次前向传播</span>
+      </div>
     </section>
     <aside class="card panel-right" id="panel-right" aria-label="训练"></aside>`;
   app.appendChild(main);
@@ -152,7 +169,14 @@ export async function boot({ workspaceBackend } = {}) {
     previewCtx.putImageData(img, 0, 0);
   };
 
-  const drawing = initDrawing($('board'), refreshPreview);
+  const drawing = initDrawing($('board'), () => {
+    refreshPreview();
+    // 教学引导：落笔且有墨迹 → 像素化阶段完成
+    if (debugHandle.drawing) {
+      const px = debugHandle.drawing.getPixels13();
+      if (px.some((v) => v > 0.05)) notifyLesson('drawn');
+    }
+  });
   debugHandle.drawing = drawing;
   refreshPreview();
 
@@ -216,6 +240,7 @@ export async function boot({ workspaceBackend } = {}) {
         try {
           await panelApi.trainSingleStep(x, y);
           setStatus(`已保存样本 #…${id.slice(-6)}（标签 ${currentLabel}），并完成一次单步训练。`);
+          notifyLesson('trained');
         } catch (e) {
           setStatus(`样本已保存，但单步训练失败：${e && e.message ? e.message : e}`);
         }
@@ -235,6 +260,22 @@ export async function boot({ workspaceBackend } = {}) {
   const stage = initStage($('stage'), net);
   debugHandle.net = net;
   debugHandle.stage = stage;
+
+  // —— 推理按钮：用当前画板内容跑一次前向传播（Task 12） ——
+  $('btn-infer').addEventListener('click', async () => {
+    const btn = $('btn-infer');
+    if (!debugHandle.stage || !debugHandle.drawing || btn.disabled) return;
+    btn.disabled = true;
+    try {
+      const x = debugHandle.drawing.getPixels13();
+      await debugHandle.stage.playInference(x);
+      notifyLesson('inference');
+    } catch (e) {
+      setStatus(`推理失败：${e && e.message ? e.message : e}`);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // —— 模型状态管理（Task 11） ——
 
@@ -273,9 +314,9 @@ export async function boot({ workspaceBackend } = {}) {
     return (await ws.listModels()).map((e) => e.name);
   }
 
-  async function newModel(name) {
+  async function newModel(name, seed) {
     model.name = uniqueModelName(name, await listModelNames());
-    model.net = createNetwork(ARCH, Date.now() % 2 ** 32);
+    model.net = createNetwork(ARCH, seed === undefined ? Date.now() % 2 ** 32 : seed);
     model.optimizer = 'adam';
     model.lr = ADAM_DEFAULT_LR;
     model.optState = createOptState(model.net, 'adam');
@@ -351,6 +392,22 @@ export async function boot({ workspaceBackend } = {}) {
     if (panelApi) await panelApi.refresh();
   }
 
+  /** 权重异常（NaN）时重置：保留模型名与优化器/lr，重建权重与训练计数。 */
+  async function resetModelWeights() {
+    if (!model.name) return;
+    model.net = createNetwork(ARCH, Date.now() % 2 ** 32);
+    model.optState = createOptState(model.net, model.optimizer);
+    model.epochsTrained = 0;
+    model.samplesSeen = 0;
+    model.runSeed = 0;
+    model.history = [];
+    if (debugHandle.stage) debugHandle.stage.setNet(model.net);
+    debugHandle.net = model.net;
+    await saveModelNow();
+    updateKv();
+    if (panelApi) await panelApi.refresh();
+  }
+
   /** 训练面板与数据集管理器的宿主 API。 */
   const api = {
     getWorkspace: () => debugHandle.workspace,
@@ -364,6 +421,8 @@ export async function boot({ workspaceBackend } = {}) {
     listModelNames,
     setOptimizer,
     setLr,
+    resetModelWeights,
+    notifyLesson,
     nextRunSeed: () => { model.runSeed += 1; return model.runSeed; },
     saveModelNow,
     notifySamplesChanged,
@@ -376,6 +435,10 @@ export async function boot({ workspaceBackend } = {}) {
   debugHandle.panel = panelApi;
   viewerApi = initDatasetViewer(api);
   debugHandle.viewer = viewerApi;
+
+  // —— 教学引导条（Task 12） ——
+  lessonApi = initLesson($('lesson-bar'), api);
+  debugHandle.lesson = lessonApi;
 
   // —— 工作区装配 ——
   const setWorkspace = async (ws) => {

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>e2e</title>
+  <link rel="stylesheet" href="../../css/fonts.css" />
+  <link rel="stylesheet" href="../../css/app.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    // —— 测试垫片（同 ui-task11.html）：rAF setTimeout 垫片 + 编解码超时重试 ——
+    window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+    window.cancelAnimationFrame = (id) => clearTimeout(id);
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(label + '-timeout')), ms)),
+      ]);
+    }
+    const rawToBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (cb, type, quality) {
+      let n = 0;
+      const attempt = () => {
+        n++;
+        withTimeout(
+          new Promise((resolve) => rawToBlob.call(this, resolve, type, quality)),
+          5000, 'toblob',
+        ).then((blob) => {
+          if (blob) cb(blob);
+          else if (n < 10) attempt();
+          else cb(null);
+        }).catch(() => {
+          if (n < 10) attempt();
+          else cb(null);
+        });
+      };
+      attempt();
+    };
+    const rawCreateImageBitmap = window.createImageBitmap.bind(window);
+    window.createImageBitmap = function (...args) {
+      let n = 0;
+      const attempt = () => {
+        n++;
+        return withTimeout(rawCreateImageBitmap(...args), 5000, 'cib').catch((e) => {
+          if (n < 10) return attempt();
+          throw e;
+        });
+      };
+      return attempt();
+    };
+    window.confirm = () => true;
+
+    import { boot } from '../../js/ui/app.js';
+    import { MemoryBackend } from '../../js/workspace.js';
+    import { importSampleDataset } from '../../js/dataset.js';
+
+    const results = { phase: 'boot', phases: ['boot'], pass: 0, fail: 0, errors: [], acc: null };
+    const ok = (cond, name) => {
+      if (cond) { results.pass++; }
+      else { results.fail++; results.errors.push(name); }
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const setPhase = (p) => {
+      results.phase = p;
+      if (!results.phases.includes(p)) results.phases.push(p);
+      console.log('[e2e] phase:', p);
+      document.title = JSON.stringify(results);
+    };
+
+    function weightsEqual(a, b) {
+      for (const k of ['w1', 'b1', 'w2', 'b2']) {
+        if (a[k].length !== b[k].length) return false;
+        for (let i = 0; i < a[k].length; i++) if (a[k][i] !== b[k][i]) return false;
+      }
+      return true;
+    }
+
+    async function main() {
+      try {
+        await Promise.race([document.fonts.ready, sleep(3000)]);
+        await boot({ workspaceBackend: new MemoryBackend() });
+        let ws = null;
+        for (let i = 0; i < 200 && !ws; i++) {
+          ws = window.__nnanatomy && window.__nnanatomy.workspace;
+          if (!ws) await sleep(50);
+        }
+        ok(!!ws, 'workspace 就绪');
+        if (!ws) { setPhase('done'); return; }
+        const panel = window.__nnanatomy.panel;
+        ok(!!panel, 'panel api 就绪');
+
+        // —— 1. 导入示例数据集（1300 张） ——
+        setPhase('import');
+        let lastPct = -1;
+        await importSampleDataset(ws, {
+          // e2e.html 在 tests/browser/ 下，把相对路径转回仓库根
+          fetchImpl: (path) => fetch(new URL('../../' + path, location.href).href),
+          onProgress: (done, total) => {
+            const pct = Math.floor((done / total) * 100);
+            if (pct !== lastPct && pct % 10 === 0) { lastPct = pct; console.log(`[e2e] 导入 ${pct}%`); }
+          },
+        });
+        const nTrain = ws.listSamples('train').length;
+        const nTest = ws.listSamples('test').length;
+        ok(nTrain === 1000 && nTest === 300, `示例集导入 1000/300（实际 ${nTrain}/${nTest}）`);
+        await panel.onSamplesChanged(); // 走真实通知路径：刷新计数 + 重评
+        setPhase('import-done');
+
+        // —— 2. 固定 seed 建模 → 训练 15 轮 ——
+        // 确定性：init seed=23 + app 训练 seed=1（首轮 runSeed）→ node 实测 acc=0.9033
+        setPhase('train');
+        await panel.newModel('e2e', 23);
+        await panel.batchTrain(15);
+        const ev = panel.getEval();
+        ok(!!ev && ev.acc !== null, '训练后评估完成');
+        results.acc = ev ? ev.acc : null;
+        ok(ev && ev.acc >= 0.9, `测试集准确率 ≥ 0.9（实际 ${ev && ev.acc.toFixed(4)}）`);
+        ok(panel.getModel().epochsTrained === 15, `轮次累计 15（实际 ${panel.getModel().epochsTrained}）`);
+        setPhase('train-done');
+
+        // —— 3. 存取 round-trip：权重 bit-identical，acc 不变 ——
+        setPhase('roundtrip');
+        const m = panel.getModel();
+        const before = {
+          w1: m.net.w1.slice(), b1: m.net.b1.slice(),
+          w2: m.net.w2.slice(), b2: m.net.b2.slice(),
+        };
+        const accBefore = ev.acc;
+        await panel.saveModelNow();
+        // 切到别的模型再切回来，确保走的是 load 路径而非内存引用
+        await panel.newModel('e2e-tmp');
+        await panel.loadModel('e2e');
+        await panel.refresh();
+        const m2 = panel.getModel();
+        ok(weightsEqual(before, m2.net), 'load 后权重 bit-identical');
+        await panel.runEvaluation();
+        const ev2 = panel.getEval();
+        ok(ev2 && Math.abs(ev2.acc - accBefore) < 1e-12, `load 后 acc 不变（${ev2 && ev2.acc.toFixed(4)}）`);
+        setPhase('done');
+      } catch (e) {
+        results.fail++;
+        results.errors.push('异常：' + (e && e.message ? e.message : String(e)));
+        setPhase('done');
+      }
+    }
+
+    setPhase('boot');
+    main();
+  </script>
+</body>
+</html>

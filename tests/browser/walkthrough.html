@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>walkthrough</title>
+  <link rel="stylesheet" href="../../css/fonts.css" />
+  <link rel="stylesheet" href="../../css/app.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    // —— 测试垫片（同 ui-task11.html）：rAF setTimeout 垫片 + 编解码超时重试 ——
+    window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+    window.cancelAnimationFrame = (id) => clearTimeout(id);
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(label + '-timeout')), ms)),
+      ]);
+    }
+    const rawToBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (cb, type, quality) {
+      let n = 0;
+      const attempt = () => {
+        n++;
+        withTimeout(
+          new Promise((resolve) => rawToBlob.call(this, resolve, type, quality)),
+          3000, 'toblob',
+        ).then((blob) => {
+          if (blob) cb(blob);
+          else if (n < 8) attempt();
+          else cb(null);
+        }).catch(() => {
+          if (n < 8) attempt();
+          else cb(null);
+        });
+      };
+      attempt();
+    };
+    const rawCreateImageBitmap = window.createImageBitmap.bind(window);
+    window.createImageBitmap = function (...args) {
+      let n = 0;
+      const attempt = () => {
+        n++;
+        return withTimeout(rawCreateImageBitmap(...args), 3000, 'cib').catch((e) => {
+          if (n < 8) return attempt();
+          throw e;
+        });
+      };
+      return attempt();
+    };
+    window.confirm = () => true;
+
+    import { boot } from '../../js/ui/app.js';
+    import { MemoryBackend, canvasToPngBlob } from '../../js/workspace.js';
+
+    const params = new URLSearchParams(location.search);
+    const mode = params.get('mode') || 'main'; // main | rm | touch
+    const results = { mode, pass: 0, fail: 0, errors: [] };
+    const ok = (cond, name) => {
+      if (cond) { results.pass++; }
+      else { results.fail++; results.errors.push(name); }
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const $ = (id) => document.getElementById(id);
+
+    /** 13×13 伪样本画布（黑底白点，位置随 k 变化）。 */
+    function drawPseudo(k) {
+      const c = document.createElement('canvas');
+      c.width = 13; c.height = 13;
+      const g = c.getContext('2d');
+      g.fillStyle = '#000'; g.fillRect(0, 0, 13, 13);
+      g.fillStyle = '#fff';
+      g.fillRect(2 + k * 6, 9, 3, 2);
+      return c;
+    }
+
+    /** 直接在画板上画一笔（绕过 pointer 事件，测保存链路用）。 */
+    function drawOnBoard() {
+      const board = $('board');
+      const ctx = board.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(60, 60, 140, 30);
+    }
+
+    async function waitFor(fn, timeoutMs, label) {
+      const t0 = Date.now();
+      while (Date.now() - t0 < timeoutMs) {
+        if (fn()) return true;
+        await sleep(50);
+      }
+      return false;
+    }
+
+    async function mainChecks() {
+      await Promise.race([document.fonts.ready, sleep(3000)]);
+      await boot({ workspaceBackend: new MemoryBackend() });
+      let ws = null;
+      for (let i = 0; i < 100 && !ws; i++) {
+        ws = window.__nnanatomy && window.__nnanatomy.workspace;
+        if (!ws) await sleep(50);
+      }
+      ok(!!ws, 'workspace 就绪');
+      if (!ws) { document.title = JSON.stringify(results); return; }
+      const panel = window.__nnanatomy.panel;
+      const lesson = window.__nnanatomy.lesson;
+      ok(!!panel, 'panel api 就绪');
+      ok(!!lesson, 'lesson api 就绪');
+
+      // —— 1. 空模型：自动创建"未命名模型"，舞台/面板不报错 ——
+      const m0 = panel.getModel();
+      ok(!!m0 && !!m0.name && !!m0.net, `空工作区自动建模（${m0 && m0.name}）`);
+
+      // —— 2. 空数据集：点"开始训练" → 中文提示，不抛错 ——
+      await panel.batchTrain(1);
+      ok(!panel.isTraining(), '空数据集训练后不在训练态');
+      ok($('train-status').textContent.includes('为空'), `空数据集有中文提示（${$('train-status').textContent.slice(0, 20)}…）`);
+
+      // —— 3. 训练中按钮态 / 暂停 / 继续 ——
+      for (let k = 0; k < 6; k++) {
+        const blob = await canvasToPngBlob(drawPseudo(k));
+        await ws.addSample('train', String(k % 10), blob, { width: 13, height: 13, source: 'handwritten' });
+      }
+      const p = panel.batchTrain(3);
+      ok(await waitFor(() => panel.isTraining(), 15000, '训练开始'), '训练已开始');
+      ok($('btn-train').disabled && !$('btn-pause').disabled, '训练中：开始禁用/暂停可用');
+      ok($('opt-select').disabled && $('lr-range').disabled && $('epochs-input').disabled && $('model-select').disabled,
+        '训练中：优化器/lr/轮数/模型选择禁用');
+      // 训练中点左栏"保存并训练" → 样本照存、跳过单步、有提示
+      const before = ws.listSamples('train').length;
+      drawOnBoard();
+      $('btn-save').click();
+      ok(await waitFor(() => $('status').textContent.includes('跳过单步'), 15000, '跳过单步提示'),
+        '训练中保存：跳过单步并提示');
+      ok(ws.listSamples('train').length === before + 1, '训练中保存：样本照常入库');
+      // 暂停 → 继续 → 完成
+      $('btn-pause').click();
+      await p;
+      ok(!$('btn-resume').disabled, '暂停后继续可用');
+      ok(panel.getModel().epochsTrained >= 1, `暂停前至少完成 1 轮（${panel.getModel().epochsTrained}）`);
+      $('btn-resume').click();
+      ok(await waitFor(() => !panel.isTraining() && !$('btn-train').disabled, 120000, '训练完成'),
+        '继续后训练完成，按钮恢复');
+      ok(panel.getModel().epochsTrained === 3, `3 轮全部完成（${panel.getModel().epochsTrained}）`);
+
+      // —— 4. NaN 恢复 ——
+      const m = panel.getModel();
+      m.net.w1[0] = NaN;
+      const x = new Array(169).fill(0); x[80] = 1;
+      await panel.trainSingleStep(x, 3);
+      ok(!$('btn-reset-weights').classList.contains('hidden'), 'NaN 后重置按钮出现');
+      ok($('train-status').textContent.includes('NaN'), 'NaN 后状态行报错');
+      $('btn-reset-weights').click();
+      ok(await waitFor(() => $('btn-reset-weights').classList.contains('hidden'), 15000, '重置完成'),
+        '点重置后按钮收起');
+      const m2 = panel.getModel();
+      let finite = true;
+      for (const arr of [m2.net.w1, m2.net.b1, m2.net.w2, m2.net.b2]) {
+        for (let i = 0; i < arr.length; i++) if (!Number.isFinite(arr[i])) { finite = false; break; }
+      }
+      ok(finite, '重置后权重全部有限');
+      ok(m2.epochsTrained === 0, '重置后轮次清零');
+
+      document.title = JSON.stringify(results);
+    }
+
+    async function rmCheck() {
+      // reduced-motion：动画应瞬达 resolve
+      await Promise.race([document.fonts.ready, sleep(3000)]);
+      await boot({ workspaceBackend: new MemoryBackend() });
+      let stage = null;
+      for (let i = 0; i < 100 && !stage; i++) {
+        stage = window.__nnanatomy && window.__nnanatomy.stage;
+        if (!stage) await sleep(50);
+      }
+      ok(!!stage, 'stage 就绪');
+      ok(window.matchMedia('(prefers-reduced-motion: reduce)').matches, 'reduced-motion 生效');
+      if (stage) {
+        const x = new Array(169).fill(0); x[42] = 1;
+        const t0 = performance.now();
+        await stage.playInference(x);
+        const dt = performance.now() - t0;
+        ok(dt < 500, `推理动画瞬达（${dt.toFixed(0)}ms）`);
+      }
+      document.title = JSON.stringify(results);
+    }
+
+    async function touchReady() {
+      // touch 模式：只 boot，driver 用 CDP dispatchTouchEvent 画一笔后再断言
+      await Promise.race([document.fonts.ready, sleep(3000)]);
+      await boot({ workspaceBackend: new MemoryBackend() });
+      window.__wtReady = true;
+      document.title = JSON.stringify({ mode, ready: true, ...results });
+    }
+
+    try {
+      if (mode === 'rm') await rmCheck();
+      else if (mode === 'touch') await touchReady();
+      else await mainChecks();
+    } catch (e) {
+      results.fail++;
+      results.errors.push('异常：' + (e && e.message ? e.message : String(e)));
+      document.title = JSON.stringify(results);
+    }
+  </script>
+</body>
+</html>

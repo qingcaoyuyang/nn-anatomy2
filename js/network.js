@@ -115,3 +115,21 @@ export function backward(net, x, y, fwd) {
 
   return { gW1, gb1, gW2, gb2 };
 }
+
+/**
+ * 权重有限性检查（Task 12：NaN 恢复）。
+ * 学习率过大等原因可能让权重变成 NaN/Infinity；训练后调用，
+ * 返回 false 时 UI 应报错并提供"重置模型"。
+ * @param {object} net createNetwork 返回的网络
+ * @returns {boolean} 全部权重/偏置有限时 true
+ */
+export function isFiniteNet(net) {
+  if (!net) return false;
+  for (const arr of [net.w1, net.b1, net.w2, net.b2]) {
+    if (!arr) return false;
+    for (let i = 0; i < arr.length; i++) {
+      if (!Number.isFinite(arr[i])) return false;
+    }
+  }
+  return true;
+}

@@ -110,3 +110,15 @@ test('forward 返回 z1/a1/z2/p 且维度正确', () => {
     assert.strictEqual(f.a1[h], expected);
   }
 });
+
+test('isFiniteNet：正常网络 true；注入 NaN/Infinity 后 false', async () => {
+  const { isFiniteNet } = await import('../js/network.js');
+  const net = createNetwork(ARCH, 42);
+  assert.strictEqual(isFiniteNet(net), true);
+  net.w1[0] = NaN;
+  assert.strictEqual(isFiniteNet(net), false);
+  net.w1[0] = 0.5;
+  net.b2[3] = Infinity;
+  assert.strictEqual(isFiniteNet(net), false);
+  assert.strictEqual(isFiniteNet(null), false);
+});

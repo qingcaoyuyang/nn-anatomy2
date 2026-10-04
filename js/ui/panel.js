@@ -16,7 +16,7 @@ import {
   evaluate,
   inferWithTrace,
 } from '../trainer.js';
-import { forward, backward } from '../network.js';
+import { forward, backward, isFiniteNet } from '../network.js';
 import { adamStep, sgdStep } from '../optimizer.js';
 import { createRng } from '../rng.js';
 import { loadSamples } from '../dataset.js';
@@ -82,7 +82,9 @@ function fmtLr(lr) {
  *   setOptimizer(name), setLr(lr), nextRunSeed(),
  *   saveModelNow(), notifySamplesChanged(), updateKv()
  * @returns {{ batchTrain(epochs?:number):Promise<void>, trainSingleStep(x,y):Promise<void>,
- *            refresh():Promise<void>, onSamplesChanged():Promise<void>, getEval():object|null }}
+ *            refresh():Promise<void>, onSamplesChanged():Promise<void>, getEval():object|null,
+ *            newModel(name:string, seed?:number):Promise<void>, saveModelNow():Promise<void>,
+ *            loadModel(name:string):Promise<void> }}
  */
 export function initPanel(root, api) {
   if (!root) throw new Error('initPanel 需要右栏容器。');
@@ -128,6 +130,7 @@ export function initPanel(root, api) {
         <button id="btn-resume" class="btn btn-secondary" type="button" disabled>继续</button>
       </div>
       <p class="status" id="train-status">就绪。</p>
+      <button id="btn-reset-weights" class="btn btn-secondary btn-sm hidden" type="button">权重异常，重置模型</button>
       <canvas id="loss-curve" class="loss-curve" width="300" height="120" aria-label="对数似然曲线"></canvas>
       <p class="caption">对数似然 ↑ 越高越好</p>
     </section>
@@ -163,6 +166,7 @@ export function initPanel(root, api) {
   const btnPause = $('btn-pause');
   const btnResume = $('btn-resume');
   const trainStatus = $('train-status');
+  const resetWeightsBtn = $('btn-reset-weights');
   const lossCanvas = $('loss-curve');
   const metricAcc = $('metric-acc');
   const perClassEl = $('per-class');
@@ -170,6 +174,29 @@ export function initPanel(root, api) {
   const evalStatus = $('eval-status');
   const datasetSummary = $('dataset-summary');
 
+  /** 权重有限性检查（Task 12：NaN 恢复）。false 时亮出重置按钮。 */
+  function checkWeightsFinite(m) {
+    if (isFiniteNet(m.net)) {
+      resetWeightsBtn.classList.add('hidden');
+      return true;
+    }
+    setTrainStatus('权重出现 NaN/无穷大（可能学习率过大或数值发散），训练已停止。点「权重异常，重置模型」恢复。');
+    resetWeightsBtn.classList.remove('hidden');
+    return false;
+  }
+
+  resetWeightsBtn.addEventListener('click', async () => {
+    resetWeightsBtn.disabled = true;
+    try {
+      await api.resetModelWeights();
+      resetWeightsBtn.classList.add('hidden');
+      setTrainStatus('模型已重置：权重重新初始化，训练计数清零。');
+    } catch (e) {
+      setTrainStatus(`重置失败：${e && e.message ? e.message : e}`);
+    } finally {
+      resetWeightsBtn.disabled = false;
+    }
+  });
   /** 当前评估结果：{ samples, preds, acc, perClass, confusion }，样本变更后重评。 */
   let lastEval = null;
   /** 训练运行态：{ paused, total, done, seed }；null 表示空闲。 */
@@ -358,6 +385,7 @@ export function initPanel(root, api) {
     const preds = testSamples.map((s) => argmaxP(forward(m.net, s.x).p));
     lastEval = { samples: testSamples, preds, ...r };
     renderMetrics();
+    if (testSamples.length > 0 && api.notifyLesson) api.notifyLesson('evaluated');
     evalStatus.textContent = testSamples.length === 0
       ? '测试集为空：导入示例数据集后可评估。'
       : `测试集 ${testSamples.length} 个样本。`;
@@ -585,6 +613,7 @@ export function initPanel(root, api) {
     setButtons(false, true, false);
     setControlsEnabled(false);
     setTrainStatus(`训练开始：${samples.length} 个样本，${total} 轮…`);
+    let weightsOk = true;
     try {
       const done = await runEpochs(m, samples, seed, total, 1);
       trainRun.done = done;
@@ -593,8 +622,11 @@ export function initPanel(root, api) {
         setTrainStatus(`已暂停：完成 ${done}/${total} 轮。点击「继续」接着训练。`);
         setButtons(false, false, true);
         setControlsEnabled(true); // 暂停时允许调学习率/优化器再继续
-      } else {
+      } else if (checkWeightsFinite(m)) {
         setTrainStatus(`训练完成：${total} 轮，轮次累计 ${m.epochsTrained}。`);
+        if (api.notifyLesson) api.notifyLesson('trained');
+      } else {
+        weightsOk = false; // NaN：已报错并亮出重置按钮；跳过评估与保存
       }
     } catch (e) {
       setTrainStatus(`训练出错：${e && e.message ? e.message : e}`);
@@ -605,8 +637,10 @@ export function initPanel(root, api) {
         setControlsEnabled(true);
       }
     }
-    await runEvaluation();
-    await api.saveModelNow();
+    if (weightsOk) {
+      await runEvaluation();
+      await api.saveModelNow();
+    }
     await refreshModelSelect();
   }
 
@@ -650,6 +684,7 @@ export function initPanel(root, api) {
     setButtons(false, true, false);
     setControlsEnabled(false);
     setTrainStatus(`继续训练：第 ${done + 1}~${total} 轮…`);
+    let weightsOk = true;
     try {
       // 同一 runSeed：shuffle 序列与不中断完全一致
       const newDone = await runEpochs(m, samples, seed, total, done + 1);
@@ -659,8 +694,11 @@ export function initPanel(root, api) {
         setTrainStatus(`已暂停：完成 ${newDone}/${total} 轮。点击「继续」接着训练。`);
         setButtons(false, false, true);
         setControlsEnabled(true);
-      } else {
+      } else if (checkWeightsFinite(m)) {
         setTrainStatus(`训练完成：${total} 轮，轮次累计 ${m.epochsTrained}。`);
+        if (api.notifyLesson) api.notifyLesson('trained');
+      } else {
+        weightsOk = false; // NaN：已报错并亮出重置按钮；跳过评估与保存
       }
     } catch (e) {
       setTrainStatus(`训练出错：${e && e.message ? e.message : e}`);
@@ -671,8 +709,10 @@ export function initPanel(root, api) {
         setControlsEnabled(true);
       }
     }
-    await runEvaluation();
-    await api.saveModelNow();
+    if (weightsOk) {
+      await runEvaluation();
+      await api.saveModelNow();
+    }
     await refreshModelSelect();
   });
 
@@ -703,6 +743,7 @@ export function initPanel(root, api) {
       const traceBefore = inferWithTrace(m.net, x);
       const before = { trace: traceBefore, w1: m.net.w1.slice(), w2: m.net.w2.slice(), y };
       stepOnce(m, backward(m.net, x, y, traceBefore));
+      if (!checkWeightsFinite(m)) return; // 权重已坏：停掉本次单步，不播动画不计数
       const traceAfter = inferWithTrace(m.net, x);
       const after = { trace: traceAfter, w1: m.net.w1.slice(), w2: m.net.w2.slice(), y };
       await stage.playTrainingStep(before, after);
@@ -746,6 +787,11 @@ export function initPanel(root, api) {
     isTraining: () => trainRun !== null,
     runEvaluation,
     closeCellPopup,
+    /** 建模（seed 可选；e2e 用固定 seed 保证确定性）。 */
+    newModel: (name, seed) => api.newModel(name, seed),
+    /** 保存 / 加载当前模型（e2e round-trip 用）。 */
+    saveModelNow: () => api.saveModelNow(),
+    loadModel: (name) => api.loadModel(name),
   };
   return panelApi;
 }

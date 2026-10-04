@@ -574,3 +574,71 @@ html, body {
   display: block;
 }
 .ds-thumb:disabled { opacity: 0.4; cursor: wait; }
+
+/* —— 教学引导条（Task 12） —— */
+.lesson-bar {
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 10px 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lesson-steps {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.lesson-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.45;
+}
+.lesson-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e8e2d6;
+  color: #8a8172;
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.lesson-text { display: flex; flex-direction: column; line-height: 1.25; }
+.lesson-title { font-weight: 700; font-size: 13px; }
+.lesson-desc { font-size: 12px; color: var(--muted); }
+.lesson-sep { color: #c9c2b2; font-weight: 700; }
+.lesson-step.active { opacity: 1; }
+.lesson-step.active .lesson-dot {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.18);
+}
+.lesson-step.done { opacity: 0.85; }
+.lesson-step.done .lesson-dot { background: #4caf6d; color: #fff; }
+.lesson-cheer { margin: 0; font-weight: 700; color: #2e7d43; }
+.stage-actions { margin-top: 10px; align-items: center; }
+.infer-hint { font-size: 12px; color: var(--muted); }
+
+/* —— 响应式补强（Task 12）：引导条在窄屏换行 —— */
+@media (max-width: 767px) {
+  .lesson-bar { padding: 8px 12px 0; }
+  .lesson-sep { display: none; }
+  .lesson-desc { display: none; }
+}
