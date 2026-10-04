@@ -32,6 +32,11 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
+## Task 7: complete
+- Task 7: complete (commit a25e83b, review APPROVED)
+- Controller verified: 33/33 tests; 1300 PNGs on disk, per-class counts correct; PIL spot-checks 13×13 'L'.
+- Review follow-up: build-dataset.py 改用 round-half-up（与注释"四舍五入"一致）+ idx 图片/标签跨文件计数断言；重跑后 PNG 逐字节一致（说明原数据不受影响）。
+
 ## Task 6: complete
 - Task 6: complete (commit 0c81c19, review APPROVED)
 - Controller verified: `node --test tests/*.test.js` → 28/28 green; browser PNG codec page → {"pass":1,"fail":0}.
