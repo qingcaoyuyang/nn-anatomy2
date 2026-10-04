@@ -6,5 +6,6 @@
 //! 的 JS 实现逐位复现）。
 
 pub mod network;
+pub mod optimizer;
 
 pub use network::{Arch, ForwardOut, Gradients, Network};
