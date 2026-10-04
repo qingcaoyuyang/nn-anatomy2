@@ -342,7 +342,8 @@ export class Workspace {
   }
 
   _newId() {
-    return `${Date.now()}-${this._idCounter++}`;
+    // 时间戳 + 实例计数器 + 随机后缀：同一毫秒内多实例并发 add 也不碰撞。
+    return `${Date.now()}-${this._idCounter++}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   /** 返回某划分的样本条目（拷贝）：[{ id, label, file, source, createdAt, ... }]。 */
@@ -470,7 +471,7 @@ export class Workspace {
       metrics: metrics === undefined ? null : metrics,
       trainedAt: new Date().toISOString(),
     };
-    await this.backend.writeFile(this._modelFile(name), JSON.stringify(doc));
+    await this.backend.writeFile(this._modelFile(name), JSON.stringify(doc, null, 2));
   }
 
   /** 加载模型，返回 { id, name, architecture, net, optimizerState, metrics, trainedAt }。 */

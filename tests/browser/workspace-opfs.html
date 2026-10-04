@@ -6,7 +6,7 @@
 </head>
 <body>
 <script type="module">
-import { DirHandleBackend, Workspace, canvasToPngBlob } from '../../js/workspace.js';
+import { DirHandleBackend, Workspace, canvasToPngBlob, saveRecentHandle, loadRecentHandle } from '../../js/workspace.js';
 import { runWorkspaceSuite } from '../workspace-suite.js';
 
 // 浏览器侧最小 assert 垫片：提供 suite 所需的四个方法。
@@ -114,6 +114,27 @@ async function main() {
   } catch (e) {
     result.fail += 1;
     result.errors.push(`PNG 编解码往返（浏览器）: ${e && e.message ? e.message : String(e)}`);
+  }
+
+  // 浏览器专属用例：最近工作区 handle 的 IndexedDB 持久化（存→取→可用）。
+  // 注意：本环境 headless-shell 的 IndexedDB 不可用，此用例随真机 Chrome 一起跑。
+  try {
+    const probeHandle = await root.getDirectoryHandle(`ws-recent-probe-${Date.now()}`, { create: true });
+    created.push(probeHandle.name);
+    await saveRecentHandle(probeHandle);
+    const restored = await loadRecentHandle();
+    assert.ok(restored && restored.kind === 'directory', 'loadRecentHandle 应返回目录 handle');
+    assert.strictEqual(restored.name, probeHandle.name, '恢复的 handle 应指向同一目录');
+    // 恢复的 handle 真的可用：建一个文件再删掉
+    const fh = await restored.getFileHandle('ping.txt', { create: true });
+    const w = await fh.createWritable();
+    await w.write('ping');
+    await w.close();
+    await restored.removeEntry('ping.txt');
+    result.pass += 1;
+  } catch (e) {
+    result.fail += 1;
+    result.errors.push(`最近工作区 IndexedDB 持久化（浏览器）: ${e && e.message ? e.message : String(e)}`);
   }
 
   // 清理测试目录（尽力而为）

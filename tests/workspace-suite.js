@@ -85,7 +85,7 @@ const CASES = [
       const bytes = fakePngBytes(3);
       const id = await ws.addSample('train', '5', fakePngBlob(3),
         { width: 260, height: 260, source: 'handwritten' });
-      assert.ok(/^\d+-\d+$/.test(id), `id 格式异常: ${id}`);
+      assert.ok(/^\d+-\d+(-[a-z0-9]+)?$/.test(id), `id 格式异常: ${id}`);
 
       const samples = ws.listSamples('train');
       assert.strictEqual(samples.length, 1);
