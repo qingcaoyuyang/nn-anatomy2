@@ -1,6 +1,7 @@
-//! MLP 网络核心：169→16→10，LeakyReLU(0.01) + Softmax + 交叉熵，He 初始化。
+//! MLP 网络核心：169→16→10，LeakyReLU(0.01) + Softmax + 对数似然梯度
+//! （符号与交叉熵损失相反，详见下），He 初始化。
 //!
-//! # RNG 确定性契约（Task 5 的 JS 实现必须逐位复现以下算法）
+//! # RNG 确定性契约（Task 5 的 JS 实现必须复现以下算法；逐位一致的精确范围见下）
 //!
 //! ## mulberry32
 //! - 状态：`u32`；`Network::new(arch, seed: u64)` 取 seed 的低 32 位
@@ -24,6 +25,14 @@
 //!   ```
 //! - 权重 `w = z0 * sqrt(2 / fan_in)`（He 缩放）。
 //! - 偏置全部初始化为 0.0（不消耗 RNG）。
+//!
+//! ## 逐位一致的精确范围（重要，Task 5 必读）
+//! - **逐位（bit-identical）保证只到 `next_f64()` 为止**：mulberry32 的整数流
+//!   与 `u32 → f64 / 2^32` 转换在 Rust 与 JS（V8）之间逐位一致。
+//! - `ln` 与 `cos` 在 Rust（libm）与 V8 之间**不保证**逐位一致，
+//!   可能相差 1–2 ulp；`sqrt` 为正确舍入（correctly-rounded），两侧一致。
+//! - 因此 Task 5 的 JS 实现对比初始权重时必须带容差：计划中的 `< 1e-9`
+//!   预算足以覆盖（ulp 级差异远小于 1e-9）。
 //!
 //! ## 抽取顺序
 //! 1. `w1`：`inputs*hidden` 个，按行优先 `w1[h*inputs + x]`（h=0..hidden，x=0..inputs），
@@ -119,6 +128,11 @@ impl Mulberry32 {
 
     /// 标准 Box-Muller：消耗一对**连续**均匀数（u1 先、u2 后），
     /// 只返回 z0 = sqrt(-2·ln(u1))·cos(2π·u2)，**丢弃 z1，不缓存**。
+    ///
+    /// 契约说明：`u1 == 0` 时 `ln(0) = -inf`，本实现**有意不处理**
+    /// （不做钳制、重试或跳过），JS 侧（Task 5）必须逐字镜像此行为；
+    /// 任何"修复"都会让 RNG 流与初始化权重序列分叉。
+    /// （概率上 u1 精确为 0 几乎不可能发生，但契约上必须写明。）
     #[inline]
     fn next_normal(&mut self) -> f64 {
         let u1 = self.next_f64();
@@ -207,6 +221,7 @@ impl Network {
     /// LeakyReLU 导数在 z1>0 为 1，z1<=0 为 0.01（与 forward 分支一致）。
     pub fn backward(&self, x: &[f64], y: usize, f: &ForwardOut) -> Gradients {
         let (n_in, n_h, n_out) = (self.arch.inputs, self.arch.hidden, self.arch.outputs);
+        debug_assert!(y < n_out, "label y 超出输出维度");
 
         let mut dz2 = vec![0.0; n_out];
         for o in 0..n_out {
