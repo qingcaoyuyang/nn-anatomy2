@@ -39,7 +39,10 @@
       return b;
     };
 
-    /** 取真实测试样本 7/000.png → 13×13 灰度 → 169 维输入（墨=1）。 */
+    /** 取真实测试样本 7/000.png → 13×13 灰度 → 169 维输入（墨=1）。
+     * 极性约定（load-bearing）：MNIST 样本 PNG 是白字黑底（字=255），
+     * 手写板是黑字白纸（墨=0）。网络统一按"墨=1"理解，因此
+     * MNIST 用 x = gray/255，手写 PNG 用 x = 1 - gray/255。 */
     async function loadX() {
       const res = await fetch('../../data/sample-digits/test/7/000.png');
       if (!res.ok) throw new Error('fetch 样本 PNG 失败: ' + res.status);
@@ -50,7 +53,7 @@
       g.drawImage(bmp, 0, 0, 13, 13);
       const d = g.getImageData(0, 0, 13, 13).data;
       const x = new Array(169);
-      for (let i = 0; i < 169; i++) x[i] = 1 - d[i * 4] / 255; // 白纸黑字 → 墨=1
+      for (let i = 0; i < 169; i++) x[i] = d[i * 4] / 255; // MNIST 白字黑底 → 墨=1
       return x;
     }
 
