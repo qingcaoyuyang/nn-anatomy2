@@ -32,9 +32,12 @@
 - 验证能力升级：已安装无头 Chromium（`~/workspace/tools/chrome-headless-shell-linux64/`，v154），冒烟测试通过：`showDirectoryPicker` 可用、OPFS 可用、`isSecureContext=true`（file:// 下亦然）。
 - 运行方式：静态文件 + 本地 server（secure context）；要求 Chromium 内核浏览器。
 
-## Task 11: implementation in progress
-- Task 11: brief written (training panel + confusion matrix + dataset management).
-- **极性约定裁决（load-bearing，Task 11 必须遵守）**：网络输入统一"墨=1"。手写 PNG（黑字白纸）解码用 `x = 1 - gray/255` 再走 `preprocess()`；MNIST 样本 PNG（白字黑底）解码用 `x = gray/255`（13×13 直接，不取反）。
+## Task 11: implementation complete, review pending
+- Task 11: complete (commit a8c8d20) — training panel + confusion matrix + dataset management.
+- **极性约定（load-bearing，已落实）**：网络输入统一"墨=1"。手写 PNG（黑字白纸）`x = 1 − gray/255` 再走 `preprocess()`；MNIST PNG（白字黑底）`x = gray/255`（13×13 直接，不取反）。
+- Controller verified: 51/51 node tests (added dataset-decode.test.js: handwritten 260×260 →墨=1→preprocess 全链路在 node 覆盖，5/5）; smoke CDP 真机时间 15/15（×3，panel+modal 截图）；面板/modal 截图目检通过。
+- 260×260 PNG→createImageBitmap 端到端解码在本环境挂死（AGENTS.md 已记），真机需补测。
+- Reviewer pending.
 
 ## Task 10: complete
 - Task 10: complete (commit 7f287d1, review APPROVED)
