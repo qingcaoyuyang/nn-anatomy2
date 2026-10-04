@@ -10,6 +10,9 @@ node_modules/
 # 构建产物
 dist/
 
+# MNIST 原始数据缓存（tools/build-dataset.py 下载，可重新生成）
+tools/.mnist-cache/
+
 # IDE / 编辑器
 .idea/
 .vscode/
