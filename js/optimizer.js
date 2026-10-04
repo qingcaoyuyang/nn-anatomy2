@@ -17,6 +17,8 @@
 export const ADAM_BETA1 = 0.9;
 export const ADAM_BETA2 = 0.999;
 export const ADAM_EPS = 1e-8;
+/** Adam 默认学习率（spec Global Constraints）。 */
+export const ADAM_DEFAULT_LR = 0.001;
 
 /** 为 n 个参数创建零初始化的 Adam 状态 { m, v, t }，t 从 0 起计。 */
 export function createAdam(n) {

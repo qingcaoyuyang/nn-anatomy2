@@ -65,7 +65,7 @@ test('nextNormal 大致服从标准正态（均值≈0，方差≈1）', () => {
 });
 
 test('mulberry32 已知值：seed=42 的前三个 u32 输出', () => {
-  // 独立手算（标准 mulberry32 算法）的参照值，防止实现漂移
+  // 独立 Python 实现（标准 mulberry32 算法）交叉验证过的参照值，防止实现漂移
   const rng = createRng(42);
   assert.strictEqual(rng.nextU32(), 0x99E1EF7C);
   assert.strictEqual(rng.nextU32(), 0x72C32B8A);
