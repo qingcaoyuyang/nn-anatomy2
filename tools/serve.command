@@ -25,9 +25,20 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+# 清理上次异常退出留下的孤儿服务（比如直接关窗口没走 trap 的）
+if [ -f /tmp/nn-anatomy2-serve.pid ]; then
+  OLDSRV=$(cat /tmp/nn-anatomy2-serve.pid 2>/dev/null)
+  if [ -n "$OLDSRV" ] && kill -0 "$OLDSRV" 2>/dev/null; then
+    kill "$OLDSRV" 2>/dev/null
+    sleep 0.5
+  fi
+  rm -f /tmp/nn-anatomy2-serve.pid
+fi
+
 python3 -m http.server "$PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
 SRV=$!
-trap 'kill $SRV 2>/dev/null' EXIT
+echo "$SRV" > /tmp/nn-anatomy2-serve.pid
+trap 'kill $SRV 2>/dev/null; rm -f /tmp/nn-anatomy2-serve.pid' EXIT
 sleep 1
 if ! kill -0 $SRV 2>/dev/null; then
   echo "本地服务启动失败。"
