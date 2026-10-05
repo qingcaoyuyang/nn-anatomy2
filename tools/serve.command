@@ -9,8 +9,9 @@ PORT="${1:-8080}"
 # 端口被占 → 依次试 8081..8090，实在不行报错退出
 # 注：用 SO_REUSEADDR 做探测，与 http.server 自身行为一致；
 # 否则刚被杀掉的服务留下的 TIME_WAIT 连接会造成"幽灵占用"误判。
+# 返回值：0 = 端口空闲，1 = 被占用（直接取 python 退出的状态，不取反）。
 port_free() {
-  ! python3 -c "import socket; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(('127.0.0.1', $1))" 2>/dev/null
+  python3 -c "import socket; s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(('127.0.0.1', $1))" 2>/dev/null
 }
 if ! port_free "$PORT"; then
   for p in $(seq 8081 8090); do
