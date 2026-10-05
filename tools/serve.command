@@ -48,8 +48,8 @@ if ! kill -0 $SRV 2>/dev/null; then
   exit 1
 fi
 
-URL="http://127.0.0.1:$PORT/index.html"
-echo "已启动：$URL（关闭本窗口即停止）"
+URL="http://127.0.0.1:${PORT}/index.html"
+echo "已启动: ${URL} (关闭本窗口即停止)"
 if ! open -a "Google Chrome" "$URL" 2>/dev/null; then
   echo "找不到 Google Chrome，已为你打开默认浏览器。"
   open "$URL" 2>/dev/null || echo "请手动打开：$URL"
