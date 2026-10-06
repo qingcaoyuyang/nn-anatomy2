@@ -362,6 +362,12 @@ export function initStage(canvas, net) {
       ctx.strokeStyle = '#44403c';
       ctx.lineWidth = 1;
       ctx.stroke();
+      // 节点标号 0–31（教学：点击后能对应到具体节点）
+      ctx.fillStyle = '#44403c';
+      ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(h), cx, cy + 0.5);
       // 热力图选中态
       if (state.heatmap === h) {
         ctx.beginPath();
@@ -875,6 +881,97 @@ export function initStage(canvas, net) {
   canvas.addEventListener('mousemove', (ev) => {
     const [lx, ly] = toLogical(ev);
     canvas.style.cursor = hitHidden(lx, ly) >= 0 || hitBlock(lx, ly) >= 0 ? 'pointer' : 'default';
+  });
+
+  /**
+   * 双击输入墙（权重热力图模式下）：弹出 60×60 大表格，
+   * 每个格子背景=权重热力色、文字=权重数值，透视模型内部。
+   */
+  function openWeightTable(h) {
+    const net = state.net;
+    if (!net) return;
+    const n = nIn();
+    const off = h * n;
+    // 归一化基准（与 heatColors 一致的 max|w|）
+    let m = 1e-9;
+    for (let i = 0; i < n; i++) {
+      const a = Math.abs(net.w1[off + i]);
+      if (a > m) m = a;
+    }
+    const CELL = 12;
+    const SIZE = 60 * CELL;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);display:flex;' +
+      'align-items:center;justify-content:center;z-index:10000;padding:12px;box-sizing:border-box;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:12px;max-width:96vw;max-height:94vh;overflow:auto;' +
+      'padding:16px 18px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.35);';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.setAttribute('aria-label', '关闭');
+    closeBtn.style.cssText = 'position:absolute;top:10px;right:12px;width:30px;height:30px;border:none;' +
+      'background:#f1f5f9;border-radius:15px;font-size:16px;cursor:pointer;color:#475569;line-height:1;';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:15px;font-weight:800;margin:0 40px 4px 0;color:#0f172a;';
+    title.textContent = `隐藏节点 h${h} 的 3600 个权重（w1[${h}·3600+i]，按 60×60 排布）`;
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:12px;color:#64748b;margin-bottom:10px;';
+    note.textContent = '蓝色=正权重（看到墨就兴奋），红色=负权重（看到墨就抑制）；格内数字为权重值（3 位小数）。';
+    const cv = document.createElement('canvas');
+    cv.width = SIZE;
+    cv.height = SIZE;
+    cv.style.cssText = `width:${SIZE}px;height:${SIZE}px;image-rendering:pixelated;`;
+    box.appendChild(closeBtn);
+    box.appendChild(title);
+    box.appendChild(note);
+    box.appendChild(cv);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    const onKey = (e) => { if (e.key === 'Escape') { close(); window.removeEventListener('keydown', onKey); } };
+    window.addEventListener('keydown', onKey);
+
+    const c2d = cv.getContext('2d');
+    c2d.textAlign = 'center';
+    c2d.textBaseline = 'middle';
+    c2d.font = '7px ui-monospace, Menlo, Consolas, monospace';
+    for (let i = 0; i < 3600; i++) {
+      const w = net.w1[off + i];
+      const k = clamp01(Math.abs(w) / m);
+      const c = Math.round(245 - 200 * k);
+      const px = (i % 60) * CELL;
+      const py = ((i / 60) | 0) * CELL;
+      c2d.fillStyle = w >= 0 ? `rgb(${c},${c},245)` : `rgb(245,${c},${c})`;
+      c2d.fillRect(px, py, CELL, CELL);
+      // 数值文字：深色底用白字、浅色底用黑字
+      c2d.fillStyle = k > 0.55 ? '#ffffff' : '#1c1917';
+      c2d.fillText(w.toFixed(3), px + CELL / 2, py + CELL / 2 + 0.5);
+    }
+    // 网格线（每 10 像素一格，对应可视化分块）
+    c2d.strokeStyle = 'rgba(100,116,139,.35)';
+    c2d.lineWidth = 1;
+    for (let g = 0; g <= 6; g++) {
+      const p = g * 10 * CELL + 0.5;
+      c2d.beginPath(); c2d.moveTo(p, 0); c2d.lineTo(p, SIZE); c2d.stroke();
+      c2d.beginPath(); c2d.moveTo(0, p); c2d.lineTo(SIZE, p); c2d.stroke();
+    }
+  }
+
+  canvas.addEventListener('dblclick', (ev) => {
+    const [lx, ly] = toLogical(ev);
+    // 双击黄色圆圈：直接打开该隐藏节点的 60×60 权重表
+    const h = hitHidden(lx, ly);
+    if (h >= 0) {
+      openWeightTable(h);
+      return;
+    }
+    // 双击输入墙（权重热力图模式下）：打开当前热力图节点的权重表
+    if (state.heatmap == null) return;
+    const { x, y, cell, n } = BLOCKS;
+    if (lx < x || ly < y || lx >= x + n * cell || ly >= y + n * cell) return;
+    openWeightTable(state.heatmap);
   });
 
   window.addEventListener('resize', () => {
