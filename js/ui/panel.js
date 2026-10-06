@@ -629,8 +629,8 @@ export function initPanel(root, api) {
       trainRun.done = r.done;
       firstStep = r.firstStep;
       if (trainRun.paused) {
-        pausedState = { total, done, seed, modelName: m.name };
-        setTrainStatus(`已暂停：完成 ${done}/${total} 轮。点击「继续」接着训练。`);
+        pausedState = { total, done: trainRun.done, seed, modelName: m.name };
+        setTrainStatus(`已暂停：完成 ${trainRun.done}/${total} 轮。点击「继续」接着训练。`);
         setButtons(false, false, true);
         setControlsEnabled(true); // 暂停时允许调学习率/优化器再继续
       } else if (checkWeightsFinite(m)) {

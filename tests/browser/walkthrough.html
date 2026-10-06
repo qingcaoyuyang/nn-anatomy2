@@ -147,7 +147,7 @@
       // —— 4. NaN 恢复 ——
       const m = panel.getModel();
       m.net.w1[0] = NaN;
-      const x = new Array(169).fill(0); x[80] = 1;
+      const x = new Array(3600).fill(0); x[80] = 1;
       await panel.trainSingleStep(x, 3);
       ok(!$('btn-reset-weights').classList.contains('hidden'), 'NaN 后重置按钮出现');
       ok($('train-status').textContent.includes('NaN'), 'NaN 后状态行报错');
@@ -177,7 +177,7 @@
       ok(!!stage, 'stage 就绪');
       ok(window.matchMedia('(prefers-reduced-motion: reduce)').matches, 'reduced-motion 生效');
       if (stage) {
-        const x = new Array(169).fill(0); x[42] = 1;
+        const x = new Array(3600).fill(0); x[42] = 1;
         const t0 = performance.now();
         await stage.playInference(x);
         const dt = performance.now() - t0;
