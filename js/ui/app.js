@@ -15,7 +15,7 @@ import {
 } from '../workspace.js';
 import { initDrawing, BOARD_SIZE } from './drawing.js';
 import { initStage } from './stage.js';
-import { createNetwork } from '../network.js';
+import { createNetwork, forward } from '../network.js';
 import { createOptState } from '../trainer.js';
 import { ADAM_DEFAULT_LR, paramCount } from '../optimizer.js';
 import { initPanel, uniqueModelName } from './panel.js';
@@ -30,8 +30,8 @@ function notifyLesson(evt) {
   if (lessonApi) lessonApi.notify(evt);
 }
 
-/** 当前模型状态（Task 11）：训练面板与左栏单步训练共享的唯一可变状态。 */
-const ARCH = { inputs: 169, hidden: 16, outputs: 10 };
+/** 当前模型状态：训练面板与左栏单步训练共享的唯一可变状态。 */
+const ARCH = { inputs: 3600, hidden: 32, outputs: 10 };
 const model = {
   name: null,
   net: null,
@@ -101,21 +101,33 @@ export async function boot({ workspaceBackend } = {}) {
         <button class="btn btn-secondary" id="btn-clear" type="button">清空</button>
       </div>
       <div class="preview-block">
-        <canvas id="preview13" class="preview13" width="13" height="13" aria-label="13×13 输入预览"></canvas>
-        <span class="preview-caption">13×13 输入预览</span>
+        <canvas id="preview60" class="preview60" width="60" height="60" aria-label="60×60 输入预览"></canvas>
+        <span class="preview-caption">60×60 输入预览</span>
       </div>
       <p class="status" id="status">在画板上写一个数字，选择标签后保存。</p>
     </section>
     <section class="card panel-center" aria-label="神经网络舞台">
       <h2 class="card-title">神经网络舞台</h2>
-      <canvas id="stage" class="stage" width="640" height="420"></canvas>
+      <canvas id="stage" class="stage" width="680" height="440"></canvas>
       <div class="btn-row stage-actions">
         <button class="btn btn-secondary" id="btn-infer" type="button">▶ 推理</button>
         <span class="infer-hint">用当前画板内容跑一次前向传播</span>
+        <label class="realtime-toggle"><input type="checkbox" id="realtime-toggle" checked /> 实时推理（落笔即预测）</label>
+      </div>
+      <div class="live-pred" id="live-pred" aria-label="实时预测">
+        <span class="live-digit mono" id="live-digit">–</span>
+        <div class="live-bars" id="live-bars"></div>
       </div>
     </section>
     <aside class="card panel-right" id="panel-right" aria-label="训练"></aside>`;
   app.appendChild(main);
+
+  // —— 底部过程面板：预处理拆解 / 前向公式 / 训练梯度，一律展示真实计算 ——
+  const processSection = document.createElement('section');
+  processSection.className = 'card panel-process';
+  processSection.id = 'panel-process';
+  processSection.setAttribute('aria-label', '过程面板');
+  app.appendChild(processSection);
 
   // —— 工作区引导遮罩 ——
   const guide = document.createElement('div');
@@ -152,14 +164,14 @@ export async function boot({ workspaceBackend } = {}) {
   };
 
   // —— 左栏：画板 + 标签 + 预览 ——
-  const previewCanvas = $('preview13');
+  const previewCanvas = $('preview60');
   const previewCtx = previewCanvas.getContext('2d');
 
   const refreshPreview = () => {
     if (!debugHandle.drawing) return;
-    const px = debugHandle.drawing.getPixels13();
-    const img = previewCtx.createImageData(13, 13);
-    for (let i = 0; i < 169; i++) {
+    const px = debugHandle.drawing.getPixels60();
+    const img = previewCtx.createImageData(60, 60);
+    for (let i = 0; i < 3600; i++) {
       const g = Math.round(255 * (1 - px[i])); // 0=纸面白，1=墨迹黑
       img.data[i * 4] = g;
       img.data[i * 4 + 1] = g;
@@ -169,13 +181,53 @@ export async function boot({ workspaceBackend } = {}) {
     previewCtx.putImageData(img, 0, 0);
   };
 
-  const drawing = initDrawing($('board'), () => {
-    refreshPreview();
-    // 教学引导：落笔且有墨迹 → 像素化阶段完成
-    if (debugHandle.drawing) {
-      const px = debugHandle.drawing.getPixels13();
-      if (px.some((v) => v > 0.05)) notifyLesson('drawn');
+  // 实时推理：rAF 节流，落笔过程中更新轻量预测条（重动画只在落笔结束播）。
+  let liveRaf = 0;
+  const runLiveInference = () => {
+    liveRaf = 0;
+    const toggle = $('realtime-toggle');
+    if (!toggle || !toggle.checked || !debugHandle.drawing || !model.net) return;
+    try {
+      const x = debugHandle.drawing.getPixels60();
+      const { p } = forward(model.net, x);
+      renderLivePred(p);
+    } catch (e) {
+      // 实时预测失败不打断绘制
     }
+  };
+  const scheduleLiveInference = () => {
+    if (liveRaf) return;
+    liveRaf = requestAnimationFrame(runLiveInference);
+  };
+  /** 实时预测条：大数字 + top-3 概率条。 */
+  function renderLivePred(p) {
+    const digitEl = $('live-digit');
+    const barsEl = $('live-bars');
+    if (!digitEl || !barsEl) return;
+    const order = p.map((v, i) => i).sort((a, b) => p[b] - p[a]);
+    digitEl.textContent = String(order[0]);
+    barsEl.innerHTML = '';
+    for (let k = 0; k < 3; k++) {
+      const d = order[k];
+      const row = document.createElement('div');
+      row.className = 'live-bar-row';
+      row.innerHTML = `<span class="mono">${d}</span>
+        <span class="live-bar"><span class="live-fill" style="width:${(p[d] * 100).toFixed(1)}%"></span></span>
+        <span class="mono">${(p[d] * 100).toFixed(0)}%</span>`;
+      barsEl.appendChild(row);
+    }
+  }
+
+  const drawing = initDrawing($('board'), {
+    onStroke: () => {
+      refreshPreview();
+      // 教学引导：落笔且有墨迹 → 像素化阶段完成
+      if (debugHandle.drawing) {
+        const px = debugHandle.drawing.getPixels60();
+        if (px.some((v) => v > 0.05)) notifyLesson('drawn');
+      }
+    },
+    onDraw: scheduleLiveInference,
   });
   debugHandle.drawing = drawing;
   refreshPreview();
@@ -220,7 +272,7 @@ export async function boot({ workspaceBackend } = {}) {
     const saveBtn = $('btn-save');
     saveBtn.disabled = true;
     try {
-      const x = drawing.getPixels13(); // 清空前捕获当前画布（墨=1 的 13×13）
+      const x = drawing.getPixels60(); // 清空前捕获当前画布（墨=1 的 60×60）
       const y = Number(currentLabel);
       const blob = await canvasToPngBlob(drawing.canvas);
       const id = await ws.addSample('train', currentLabel, blob, {
@@ -256,7 +308,7 @@ export async function boot({ workspaceBackend } = {}) {
   // —— 中栏：神经网络舞台（Task 10） ——
   // 网络与舞台实例挂在 debugHandle 上，供训练面板（Task 11）与教学引导（Task 12）复用。
   // 注意：这里是启动时的临时网络；工作区就绪后 initDefaultModel 会加载/创建真实模型并 setNet。
-  const net = createNetwork({ inputs: 169, hidden: 16, outputs: 10 }, 7);
+  const net = createNetwork(ARCH, 7);
   const stage = initStage($('stage'), net);
   debugHandle.net = net;
   debugHandle.stage = stage;
@@ -267,7 +319,7 @@ export async function boot({ workspaceBackend } = {}) {
     if (!debugHandle.stage || !debugHandle.drawing || btn.disabled) return;
     btn.disabled = true;
     try {
-      const x = debugHandle.drawing.getPixels13();
+      const x = debugHandle.drawing.getPixels60();
       await debugHandle.stage.playInference(x);
       notifyLesson('inference');
     } catch (e) {

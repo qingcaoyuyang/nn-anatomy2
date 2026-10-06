@@ -4,10 +4,10 @@
  *   node tests/e2e.js
  *
  * 链路（tests/browser/e2e.html，MemoryBackend —— headless 下 OPFS/IndexedDB 不可用）：
- *   导入 1300 张示例集 → newModel('e2e', seed=23) → batchTrain(15, Adam 0.001)
- *   → 断言测试集 acc ≥ 0.9 → save/load round-trip（权重 bit-identical，acc 不变）
+ *   导入 3300 张示例集 → newModel('e2e', seed=23) → batchTrain(15, Adam 0.001)
+ *   → 断言测试集 acc ≥ 阈值 → save/load round-trip（权重 bit-identical，acc 不变）
  *
- * 确定性：init seed=23 + app 首轮 runSeed=1 → node 实测 acc=0.9033。
+ * 确定性：init seed=23 + app 首轮 runSeed=1 → node 实测见 docs/rebuild-plan.md。
  * 截图：/tmp/e2e-import.png /tmp/e2e-trained.png /tmp/e2e-confusion.png
  * 退出码 0=通过，1=失败。
  */

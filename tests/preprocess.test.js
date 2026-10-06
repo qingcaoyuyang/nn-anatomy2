@@ -48,10 +48,32 @@ test('centered + downsampled: center of mass ≈ (6,6) on 13×13 grid', () => {
 });
 
 test('outputs all in [0, 1]', () => {
-  const out = preprocess(diagonalGradient(), W, H);
+  const out = preprocess(diagonalGradient(), W, H, 13);
   assert.strictEqual(out.length, 169);
   for (const v of out) {
     assert.ok(v >= 0 && v <= 1, `output out of range: ${v}`);
   }
   assert.ok([...out].some((v) => v > 0), 'gradient image should have positive outputs');
+});
+
+test('default outSize=60: 3600 dims, values in [0, 1]', () => {
+  const out = preprocess(diagonalGradient(), W, H);
+  assert.strictEqual(out.length, 3600);
+  for (const v of out) {
+    assert.ok(v >= 0 && v <= 1, `output out of range: ${v}`);
+  }
+  assert.ok([...out].some((v) => v > 0), 'gradient image should have positive outputs');
+});
+
+test('preprocessWithInfo: x 与 preprocess(60) 一致，并返回重心/平移', async () => {
+  const { preprocessWithInfo } = await import('../js/preprocess.js');
+  const img = diagonalGradient();
+  const info = preprocessWithInfo(img, W, H, 60);
+  const plain = preprocess(img, W, H, 60);
+  assert.strictEqual(info.x.length, 3600);
+  for (let i = 0; i < 3600; i++) {
+    assert.strictEqual(info.x[i], plain[i], `index ${i} mismatch`);
+  }
+  assert.ok(Number.isFinite(info.cx) && Number.isFinite(info.cy), 'cx/cy finite');
+  assert.ok(Number.isFinite(info.dx) && Number.isFinite(info.dy), 'dx/dy finite');
 });

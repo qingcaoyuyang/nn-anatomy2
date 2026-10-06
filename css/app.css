@@ -642,3 +642,110 @@ html, body {
   .lesson-sep { display: none; }
   .lesson-desc { display: none; }
 }
+
+/* —— 60×60 改版新增（2026-10-06） —— */
+
+.preview60 {
+  width: 120px;
+  height: 120px;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.realtime-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-left: 12px;
+  cursor: pointer;
+}
+.realtime-toggle input { accent-color: var(--brand-dark); }
+
+.live-pred {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  min-height: 64px;
+}
+.live-digit {
+  font-size: 40px;
+  font-weight: 700;
+  font-family: var(--font-title);
+  color: var(--brand-dark);
+  min-width: 48px;
+  text-align: center;
+}
+.live-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.live-bar-row {
+  display: grid;
+  grid-template-columns: 18px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.live-bar {
+  height: 10px;
+  background: #f0e6d8;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.live-fill {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  border-radius: 5px;
+  transition: width 120ms linear;
+}
+
+/* —— 底部过程面板 —— */
+.panel-process {
+  margin: 0 16px 16px;
+  padding: 14px 18px;
+}
+.proc-title {
+  font-family: var(--font-title);
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+.proc-placeholder { color: var(--muted); font-size: 13px; margin: 0; }
+.proc-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+.proc-step {
+  flex: 1 1 140px;
+  min-width: 140px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+.proc-step h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--brand-dark);
+}
+.proc-step .mono { font-family: var(--font-mono); font-size: 12px; }
+.proc-formula {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: #292524;
+  color: #fdba74;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 8px 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.proc-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }

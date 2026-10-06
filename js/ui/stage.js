@@ -1,10 +1,16 @@
 /**
- * 神经网络舞台：169→16→10 MLP 的实时可视化（Canvas 2D）。
+ * 神经网络舞台：3600→32→10 MLP 的实时可视化（Canvas 2D）。
  *
- * ES module，零 npm 依赖。布局：
- *   左：13×13 输入像素墙 ｜ 中：16 隐藏节点竖排 ｜ 右：10 条输出概率柱。
- * 连线：input→hidden 每节点只画 |w1| 最大的 top-12（192 条），
- *       hidden→output 16×10 全画（160 条）；线宽 ∝ |w|，蓝=正 / 红=负。
+ * ES module，零 npm 依赖，不碰页面 DOM（只用传入的 canvas）。布局（680×440）：
+ *   左：6×6 分块（每块 = 10×10 像素的平均墨量，灰度）｜
+ *   中：32 隐藏节点（2 列×16 行）｜
+ *   右：10 条输出概率柱。
+ * 连线：input→hidden 每隐藏节点只画 |w1| 最大的 top-8（共 256 条，
+ *       起点为该像素在其分块内的近似位置）；
+ *       hidden→output 32×10 全画（320 条）；线宽 ∝ |w|，蓝=正 / 红=负。
+ *
+ * 左下角恒画诚实标注：36 块只是帮人眼看清墨在哪，
+ * 网络实际把 3600 像素一次性全连到每个隐藏节点。
  *
  * 推理动画：粒子沿边前向流动（分两段），隐藏节点辉光渐亮，
  *           输出柱从均匀 10% 收敛到 p。
@@ -18,15 +24,20 @@
  * # 重入
  * 动画进行中再次调用 playInference / playTrainingStep → 返回进行中的
  * Promise（不排队、不打断）。动画结束后状态落在终态。
+ * （参数校验先于重入检查：非法输入直接抛错。）
  *
  * # 状态语义（教学停留用）
  * - playTrainingStep 结束后，输出柱保持 before（灰）/ after（蓝）双色对比态，
  *   直到下一次 playInference / render；
- * - playInference 开始时会清除热力图（highlightNode）与对比柱，回到"当前输入"态。
+ * - playInference 开始时清除热力图/分块详情与对比柱，回到"当前输入"态。
  *
  * # 点击交互
- * 点击隐藏节点 → highlightNode('hidden', idx)：输入墙切换显示该节点
- * 169 权重的蓝红热力图；再点一次该节点、或点击空白处 → 恢复输入显示。
+ * - 点击隐藏节点 → 左侧切换显示该节点 3600 权重的蓝红热力图；
+ *   再点该节点 → 恢复分块显示；
+ * - 点击分块 → 左侧显示该块 100 像素小图 + 该块 Σ|w| 最大的 top-3 隐藏节点；
+ *   再点该块 → 恢复分块显示；
+ * - 点击空白 → 恢复分块显示；
+ * - 热力图模式下点分块 → 退出热力图并显示该分块详情。
  */
 
 import { inferWithTrace } from '../trainer.js';
@@ -34,14 +45,16 @@ import { createParticleSystem, MAX_PARTICLES } from './particles.js';
 
 const TAU = Math.PI * 2;
 
-/* —— 逻辑画布尺寸（与 <canvas width=640 height=420> 属性一致） —— */
-const W = 640;
-const H = 420;
+/* —— 逻辑画布尺寸 —— */
+const W = 680;
+const H = 440;
 
 /* —— 布局 —— */
-const WALL = { x: 20, y: 139, cell: 11, n: 13 }; // 13×13=143，垂直居中
-const HIDDEN = { x: 300, y0: 40, y1: 380, r: 12, n: 16 };
-const OUT = { labelX: 396, barX: 425, barMax: 140, y0: 60, rowH: 30, n: 10 };
+const BLOCKS = { x: 16, y: 56, cell: 30, n: 6, px: 10 }; // 6×6 块，每块 10×10 像素 → 180×180
+const HIDDEN = { x0: 330, colGap: 56, y0: 56, y1: 388, r: 10, cols: 2, rows: 16 }; // 32 节点
+const OUT = { labelX: 452, barX: 478, barMax: 120, y0: 64, rowH: 32, n: 10 };
+
+const HONEST = '36 块只是帮人眼看清墨在哪；网络实际把 3600 像素一次性全连到每个隐藏节点';
 
 /* —— 配色 —— */
 const POS = '37,99,235'; // 蓝（正权重）
@@ -53,6 +66,7 @@ const GRID_BG = '#fafaf9';
 const FONT_NUM = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const FONT_NUM_SM = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const FONT_LABEL = '12px "Noto Sans SC", sans-serif';
+const FONT_NOTE = '11px "Noto Sans SC", sans-serif';
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (t) => {
@@ -60,9 +74,14 @@ const smooth = (t) => {
   return c * c * (3 - 2 * c);
 };
 
-/** 隐藏节点 h 的圆心 y。 */
-function hiddenY(h) {
-  return HIDDEN.y0 + (h * (HIDDEN.y1 - HIDDEN.y0)) / (HIDDEN.n - 1);
+/** 隐藏节点 h 的圆心坐标（2 列×16 行：h = col*16 + row）。 */
+function hiddenXY(h) {
+  const col = (h / HIDDEN.rows) | 0;
+  const row = h % HIDDEN.rows;
+  return [
+    HIDDEN.x0 + col * HIDDEN.colGap,
+    HIDDEN.y0 + (row * (HIDDEN.y1 - HIDDEN.y0)) / (HIDDEN.rows - 1),
+  ];
 }
 
 /** 输出行 o 的中心 y。 */
@@ -70,11 +89,22 @@ function outY(o) {
   return OUT.y0 + o * OUT.rowH + OUT.rowH / 2;
 }
 
-/** 输入像素 i 的中心坐标。 */
-function pixelXY(i) {
-  const c = i % WALL.n;
-  const r = (i / WALL.n) | 0;
-  return [WALL.x + c * WALL.cell + WALL.cell / 2, WALL.y + r * WALL.cell + WALL.cell / 2];
+/**
+ * 输入像素 i（0..3599，60×60 行主序）在其所属分块内的近似位置。
+ * 分块 cell=30px 对应 10×10 像素 → 每像素 3px。
+ */
+function pixelInBlockXY(i) {
+  const px = i % 60;
+  const py = (i / 60) | 0;
+  const bx = (px / BLOCKS.px) | 0;
+  const by = (py / BLOCKS.px) | 0;
+  const wx = px % BLOCKS.px;
+  const wy = py % BLOCKS.px;
+  const unit = BLOCKS.cell / BLOCKS.px; // 3
+  return [
+    BLOCKS.x + bx * BLOCKS.cell + (wx + 0.5) * unit,
+    BLOCKS.y + by * BLOCKS.cell + (wy + 0.5) * unit,
+  ];
 }
 
 /** 在行主序数组 row（起点 off，长 n）中取 |值| 最大的 k 个下标。 */
@@ -87,20 +117,22 @@ function topKAbs(arr, off, n, k) {
 
 /**
  * 按当前网络构建边的几何缓存。
- * e1: input→hidden（每隐藏节点 top-12）；e2: hidden→output（全）。
+ * e1: input→hidden（每隐藏节点 top-8，共 256 条，起点为像素在分块内的近似位置）；
+ * e2: hidden→output（32×10 全画）。
  */
 function buildEdges(net) {
   const { inputs: nIn, hidden: nH, outputs: nOut } = net.arch;
   const e1 = [];
   let max1 = 1e-9;
   for (let h = 0; h < nH; h++) {
-    const top = topKAbs(net.w1, h * nIn, nIn, 12);
+    const top = topKAbs(net.w1, h * nIn, nIn, 8);
+    const [hx, hy] = hiddenXY(h);
     for (const i of top) {
       const w = net.w1[h * nIn + i];
       const aw = Math.abs(w);
       if (aw > max1) max1 = aw;
-      const [px, py] = pixelXY(i);
-      e1.push({ h, i, x1: px, y1: py, x2: HIDDEN.x, y2: hiddenY(h), w });
+      const [px, py] = pixelInBlockXY(i);
+      e1.push({ h, i, x1: px, y1: py, x2: hx, y2: hy, w });
     }
   }
   const e2 = [];
@@ -111,7 +143,8 @@ function buildEdges(net) {
       const w = net.w2[o * nH + h];
       const aw = Math.abs(w);
       if (aw > max2) max2 = aw;
-      const e = { o, h, x1: HIDDEN.x, y1: hiddenY(h), x2: OUT.barX, y2: outY(o), w };
+      const [hx, hy] = hiddenXY(h);
+      const e = { o, h, x1: hx, y1: hy, x2: OUT.barX, y2: outY(o), w };
       e2.push(e);
       e2ByOutput[o].push(e);
     }
@@ -119,7 +152,7 @@ function buildEdges(net) {
   return { e1, e2, e2ByOutput, max1, max2 };
 }
 
-/** DPR 自适应：backing store 按 dpr 放大，逻辑坐标恒为 640×420。 */
+/** DPR 自适应：backing store 按 dpr 放大，逻辑坐标恒为 680×440。 */
 function fitCanvas(canvas, ctx) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(W * dpr);
@@ -131,7 +164,8 @@ function fitCanvas(canvas, ctx) {
  * 初始化舞台。
  * @param {HTMLCanvasElement} canvas 中栏 <canvas id="stage">
  * @param {object} net createNetwork 产物（引用；setNet 可替换）
- * @returns {{ setNet, render, playInference, playTrainingStep, highlightNode, lastTrace, _freeze }}
+ * @returns {{ setNet, render, playInference, playTrainingStep, highlightNode,
+ *   clearHighlight, getLastTrace, lastTrace, _freeze }}
  *   _freeze 仅测试用：冻结当前动画帧（供截图），不对外文档化。
  */
 export function initStage(canvas, net) {
@@ -139,20 +173,25 @@ export function initStage(canvas, net) {
   fitCanvas(canvas, ctx);
 
   const sys = createParticleSystem(MAX_PARTICLES);
+  const nH = () => state.net.arch.hidden;
+  const nIn = () => state.net.arch.inputs;
 
   const state = {
     net,
     edges: buildEdges(net),
-    x: null, // 当前输入（169 数组）或 null
+    x: null, // 当前输入（3600 数组）或 null
     trace: null, // inferWithTrace 结果或 null
     lastTrace: null,
     heatmap: null, // 正在做权重热力图的隐藏节点下标，或 null
+    heatColors: null, // { h, colors[3600] } 热力图颜色缓存（避免每帧重算）
+    blockDetail: null, // 正在看详情的分块下标（0..35），或 null
+    blockInfo: null, // { b, top3:[h,h,h] } 分块详情缓存
     compare: null, // { before: p[10], after: p[10] } 或 null
     pulses: [], // 权重脉冲 [{ x, y, dw, t0, dur }]
     glowT: 1, // 隐藏节点辉光进度（动画中 0→1）
     barT: 1, // 输出柱收敛进度（动画中 0→1）
     now: null, // 当前动画已流逝 ms（脉冲用），非动画时 null
-    anim: null, // 进行中的动画 { promise, raf, cancelled, finish }
+    anim: null, // 进行中的动画 { promise, raf, cancelled, finish, exposed }
     reduced: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
 
@@ -160,7 +199,6 @@ export function initStage(canvas, net) {
 
   function drawEdges() {
     const { e1, e2, max1, max2 } = state.edges;
-    ctx.lineWidth = 1;
     for (const e of e1) {
       const k = Math.abs(e.w) / max1;
       ctx.strokeStyle = `rgba(${e.w >= 0 ? POS : NEG},${(0.12 + 0.3 * k).toFixed(3)})`;
@@ -181,52 +219,129 @@ export function initStage(canvas, net) {
     }
   }
 
-  /** 输入墙：热力图模式显示隐藏节点权重，否则显示当前输入 x（无则空白）。 */
-  function drawInputWall() {
+  /** 分块 (bx,by) 的平均墨量（0~1），无输入时为 0。 */
+  function blockAvg(bx, by) {
+    if (!state.x) return 0;
+    let s = 0;
+    for (let wy = 0; wy < BLOCKS.px; wy++) {
+      const row = (by * BLOCKS.px + wy) * 60 + bx * BLOCKS.px;
+      for (let wx = 0; wx < BLOCKS.px; wx++) s += state.x[row + wx];
+    }
+    return s / (BLOCKS.px * BLOCKS.px);
+  }
+
+  /** 隐藏节点 h 的 3600 权重热力图颜色（蓝正/红负），带缓存。 */
+  function heatColors(h) {
+    const cached = state.heatColors;
+    if (cached && cached.h === h && cached.net === state.net) return cached.colors;
+    const n = nIn();
+    let m = 1e-9;
+    for (let i = 0; i < n; i++) {
+      const a = Math.abs(state.net.w1[h * n + i]);
+      if (a > m) m = a;
+    }
+    const colors = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const w = state.net.w1[h * n + i];
+      const k = clamp01(Math.abs(w) / m);
+      const c = Math.round(245 - 200 * k);
+      colors[i] = w >= 0 ? `rgb(${c},${c},245)` : `rgb(245,${c},${c})`;
+    }
+    state.heatColors = { h, net: state.net, colors };
+    return colors;
+  }
+
+  /** 左侧输入区：分块 / 权重热力图 / 分块详情 三种模式。 */
+  function drawInputArea() {
+    const { x, y, cell, n } = BLOCKS;
+    const size = n * cell;
     ctx.fillStyle = GRID_BG;
-    ctx.fillRect(WALL.x, WALL.y, WALL.n * WALL.cell, WALL.n * WALL.cell);
+    ctx.fillRect(x, y, size, size);
+
     if (state.heatmap != null) {
-      const h = state.heatmap;
-      const { inputs: nIn } = state.net.arch;
-      let m = 1e-9;
-      for (let i = 0; i < nIn; i++) {
-        const a = Math.abs(state.net.w1[h * nIn + i]);
-        if (a > m) m = a;
+      // 60×60 权重热力图（3px/像素）
+      const colors = heatColors(state.heatmap);
+      const pc = size / 60;
+      for (let i = 0; i < 3600; i++) {
+        const px = i % 60;
+        const py = (i / 60) | 0;
+        ctx.fillStyle = colors[i];
+        ctx.fillRect(x + px * pc, y + py * pc, pc + 0.5, pc + 0.5);
       }
-      for (let i = 0; i < nIn; i++) {
-        const w = state.net.w1[h * nIn + i];
-        const k = clamp01(Math.abs(w) / m);
-        const c = Math.round(245 - 200 * k);
-        ctx.fillStyle = w >= 0 ? `rgb(${c},${c},245)` : `rgb(245,${c},${c})`;
-        const [px, py] = pixelXY(i);
-        ctx.fillRect(px - WALL.cell / 2, py - WALL.cell / 2, WALL.cell, WALL.cell);
+    } else if (state.blockDetail != null) {
+      // 该块 100 像素小图（18px/像素）+ top-3 隐藏节点
+      const b = state.blockDetail;
+      const bx = b % n;
+      const by = (b / n) | 0;
+      const pc = size / BLOCKS.px;
+      for (let wy = 0; wy < BLOCKS.px; wy++) {
+        for (let wx = 0; wx < BLOCKS.px; wx++) {
+          const v = state.x ? clamp01(state.x[(by * BLOCKS.px + wy) * 60 + bx * BLOCKS.px + wx]) : 0;
+          const g = Math.round(255 * (1 - v));
+          ctx.fillStyle = `rgb(${g},${g},${g})`;
+          ctx.fillRect(x + wx * pc, y + wy * pc, pc, pc);
+        }
       }
-    } else if (state.x) {
-      for (let i = 0; i < 169; i++) {
-        const g = Math.round(255 * (1 - clamp01(state.x[i])));
-        ctx.fillStyle = `rgb(${g},${g},${g})`;
-        const [px, py] = pixelXY(i);
-        ctx.fillRect(px - WALL.cell / 2, py - WALL.cell / 2, WALL.cell, WALL.cell);
+      ctx.strokeStyle = '#e7e5e4';
+      ctx.lineWidth = 1;
+      for (let k = 0; k <= BLOCKS.px; k++) {
+        ctx.beginPath();
+        ctx.moveTo(x + k * pc + 0.5, y);
+        ctx.lineTo(x + k * pc + 0.5, y + size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y + k * pc + 0.5);
+        ctx.lineTo(x + size, y + k * pc + 0.5);
+        ctx.stroke();
+      }
+      if (state.blockInfo) {
+        ctx.fillStyle = MUTED;
+        ctx.font = FONT_NUM_SM;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        const t3 = state.blockInfo.top3.map((h) => `h${h}`).join(' ');
+        ctx.fillText(`块(${bx},${by}) Σ|w| top-3: ${t3}`, x, y + size + 20);
+      }
+    } else {
+      // 6×6 分块：灰度 = 平均墨量
+      for (let by = 0; by < n; by++) {
+        for (let bx = 0; bx < n; bx++) {
+          const g = Math.round(255 * (1 - blockAvg(bx, by)));
+          ctx.fillStyle = `rgb(${g},${g},${g})`;
+          ctx.fillRect(x + bx * cell, y + by * cell, cell, cell);
+        }
+      }
+      ctx.strokeStyle = '#e7e5e4';
+      ctx.lineWidth = 1;
+      for (let k = 0; k <= n; k++) {
+        ctx.beginPath();
+        ctx.moveTo(x + k * cell + 0.5, y);
+        ctx.lineTo(x + k * cell + 0.5, y + size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y + k * cell + 0.5);
+        ctx.lineTo(x + size, y + k * cell + 0.5);
+        ctx.stroke();
       }
     }
-    ctx.strokeStyle = '#e7e5e4';
+    ctx.strokeStyle = '#d6d3d1';
     ctx.lineWidth = 1;
-    ctx.strokeRect(WALL.x, WALL.y, WALL.n * WALL.cell + 1, WALL.n * WALL.cell + 1);
+    ctx.strokeRect(x, y, size + 1, size + 1);
   }
 
   /** 隐藏节点：圆圈 + 辉光（亮度 ∝ a1），选中描边。 */
   function drawHidden() {
     const a1 = state.trace ? state.trace.a1 : null;
+    const n = nH();
     let scale = 1e-9;
     if (a1) {
-      for (let h = 0; h < 16; h++) {
+      for (let h = 0; h < n; h++) {
         const a = Math.abs(a1[h]);
         if (a > scale) scale = a;
       }
     }
-    for (let h = 0; h < 16; h++) {
-      const cx = HIDDEN.x;
-      const cy = hiddenY(h);
+    for (let h = 0; h < n; h++) {
+      const [cx, cy] = hiddenXY(h);
       const b = a1 ? clamp01(a1[h] / scale) * state.glowT : 0;
       // 辉光（径向渐变圆，不用 shadowBlur）
       if (b > 0.01) {
@@ -313,35 +428,46 @@ export function initStage(canvas, net) {
   }
 
   function drawCaptions() {
+    ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = MUTED;
     ctx.font = FONT_LABEL;
+    // 左：随模式变化的标题
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(state.heatmap != null ? `输入墙：隐藏节点 h${state.heatmap} 权重热力图（点节点切换回输入）` : '输入 · 13×13', WALL.x, WALL.y - 14);
+    let leftTitle = '输入 · 60×60（6×6 块）';
+    if (state.heatmap != null) leftTitle = `输入墙：隐藏节点 h${state.heatmap} 权重热力图（点节点/空白恢复）`;
+    else if (state.blockDetail != null) leftTitle = '分块详情（点该块/空白恢复）';
+    ctx.fillText(leftTitle, BLOCKS.x, BLOCKS.y - 14);
+    // 中
     ctx.textAlign = 'center';
-    ctx.fillText('隐藏层 · 16', HIDDEN.x, HIDDEN.y0 - 16);
+    ctx.fillText('隐藏层 · 32', HIDDEN.x0 + HIDDEN.colGap / 2, HIDDEN.y0 - 16);
+    // 右
     ctx.textAlign = 'left';
     ctx.fillText('输出 · 概率', OUT.barX, OUT.y0 - 14);
-    // 底栏状态
+
+    // 底栏：左 = 诚实标注（恒显），右 = 状态
+    ctx.font = FONT_NOTE;
+    ctx.fillStyle = MUTED;
     ctx.textAlign = 'left';
+    ctx.fillText(HONEST, 16, H - 14);
+    ctx.textAlign = 'right';
     if (state.compare) {
+      const swY = H - 22;
       ctx.fillStyle = '#a8a29e';
-      ctx.fillRect(W - 190, H - 22, 10, 10);
+      ctx.fillRect(W - 186, swY, 10, 10);
       ctx.fillStyle = `rgb(${POS})`;
-      ctx.fillRect(W - 100, H - 22, 10, 10);
+      ctx.fillRect(W - 106, swY, 10, 10);
       ctx.fillStyle = MUTED;
-      ctx.fillText('更新前', W - 176, H - 13);
-      ctx.fillText('更新后', W - 86, H - 13);
+      ctx.font = FONT_NOTE;
+      ctx.fillText('更新前', W - 170, H - 13);
+      ctx.fillText('更新后', W - 90, H - 13);
     } else if (state.trace) {
       ctx.fillStyle = MUTED;
-      ctx.fillText(
-        `预测 ${state.trace.pred}　p=${state.trace.p[state.trace.pred].toFixed(3)}`,
-        WALL.x,
-        H - 14
-      );
+      ctx.font = FONT_NOTE;
+      ctx.fillText(`预测 ${state.trace.pred}　p=${state.trace.p[state.trace.pred].toFixed(3)}`, W - 16, H - 14);
     } else {
       ctx.fillStyle = MUTED;
-      ctx.fillText('等待推理…', WALL.x, H - 14);
+      ctx.font = FONT_NOTE;
+      ctx.fillText('等待推理…', W - 16, H - 14);
     }
   }
 
@@ -350,7 +476,7 @@ export function initStage(canvas, net) {
     ctx.clearRect(0, 0, W, H);
     drawEdges();
     drawPulses();
-    drawInputWall();
+    drawInputArea();
     drawHidden();
     drawOutput();
     sys.draw(ctx);
@@ -382,7 +508,7 @@ export function initStage(canvas, net) {
     });
     const t0 = performance.now();
     let last = t0;
-    const anim = { promise, raf: 0, cancelled: false, finish: null };
+    const anim = { promise, raf: 0, cancelled: false, finish: null, exposed: null };
     state.anim = anim;
     const finish = () => {
       if (state.anim !== anim) return;
@@ -426,6 +552,9 @@ export function initStage(canvas, net) {
       state.trace = null;
       state.lastTrace = null;
       state.heatmap = null;
+      state.heatColors = null;
+      state.blockDetail = null;
+      state.blockInfo = null;
       state.compare = null;
       state.pulses.length = 0;
       sys.clear();
@@ -436,34 +565,43 @@ export function initStage(canvas, net) {
 
     render,
 
-    /** 最近一次推理/训练步的 trace（测试与 Task 11/12 读取用）。 */
+    /** 最近一次推理的 trace（过程面板用）。 */
+    getLastTrace() {
+      return state.lastTrace;
+    },
+
+    /** 最近一次推理/训练步的 trace（旧调用方兼容）。 */
     get lastTrace() {
       return state.lastTrace;
     },
 
     /**
      * 推理动画：粒子 input→hidden→output 分两段流动，隐藏节点辉光渐亮，
-     * 输出柱从 10% 收敛到 p。
-     * @param {number[]} x 169 维输入（0~1）
+     * 输出柱从 10% 收敛到 p。结束后 state.lastTrace = trace。
+     * @param {number[]|Float64Array} x 3600 维输入（0~1）；长度不对直接抛错
      * @returns {Promise<object>} resolve(trace)；动画进行中重复调用
      *   （含与 playTrainingStep 交叉）返回进行中的同一 Promise
      */
     playInference(x) {
-      if (state.anim) return state.anim.exposed; // 禁止重入
       if (!Array.isArray(x) && !(x instanceof Float64Array)) {
-        throw new Error('playInference 需要 169 维输入数组。');
+        throw new Error('playInference 需要 3600 维输入数组。');
       }
-      if (x.length !== 169) throw new Error(`playInference 需要 169 维输入，收到 ${x.length}。`);
+      if (x.length !== 3600) throw new Error(`playInference 需要 3600 维输入，收到 ${x.length}。`);
+      if (state.anim) return state.anim.exposed; // 禁止重入
       const trace = inferWithTrace(state.net, x);
       state.x = Array.from(x);
       state.trace = trace;
       state.lastTrace = trace;
       state.compare = null;
       state.heatmap = null;
+      state.heatColors = null;
+      state.blockDetail = null;
+      state.blockInfo = null;
 
       const { e1, e2 } = state.edges;
+      const n = nH();
       let maxA1 = 1e-9;
-      for (let h = 0; h < 16; h++) {
+      for (let h = 0; h < n; h++) {
         const a = Math.abs(trace.a1[h]);
         if (a > maxA1) maxA1 = a;
       }
@@ -520,10 +658,9 @@ export function initStage(canvas, net) {
     /**
      * 训练步动画：红色误差粒子 output→hidden→input 反向流动，
      * |Δw| top-24 的边发扩张脉冲，输出柱显示 before/after 双色对比。
-     * @param {object} before { trace, w1:[...], w2:[...], y? }
-     *   **注意：w1/w2 必须是训练步之前的快照拷贝**（如 net.w1.slice()）；
-     *   传网络的活引用会导致 Δw 全零、脉冲静默消失。
+     * @param {object} before { trace, w1: 快照, w2: 快照, y? }
      * @param {object} after 同 before（训练步之后的快照）
+     *   调用方保证 w1/w2 是训练步前后的切片快照（不是网络活引用），直接用即可。
      * @returns {Promise<void>}；动画中重复调用返回同一 Promise
      */
     playTrainingStep(before, after) {
@@ -547,13 +684,15 @@ export function initStage(canvas, net) {
 
       // |Δw| top-24 脉冲（取自实际绘制的边）
       const { e1, e2 } = state.edges;
+      const nI = nIn();
+      const nHd = nH();
       const cands = [];
       for (const e of e1) {
-        const dw = after.w1[e.h * 169 + e.i] - before.w1[e.h * 169 + e.i];
+        const dw = after.w1[e.h * nI + e.i] - before.w1[e.h * nI + e.i];
         cands.push({ x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, dw });
       }
       for (const e of e2) {
-        const dw = after.w2[e.o * 16 + e.h] - before.w2[e.o * 16 + e.h];
+        const dw = after.w2[e.o * nHd + e.h] - before.w2[e.o * nHd + e.h];
         cands.push({ x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2, dw });
       }
       cands.sort((a, b) => Math.abs(b.dw) - Math.abs(a.dw));
@@ -617,15 +756,27 @@ export function initStage(canvas, net) {
     },
 
     /**
-     * 高亮节点：目前支持 layer='hidden'。切换该隐藏节点 169 权重的
-     * 蓝红热力图（再调一次取消）。
+     * 高亮节点：layer='hidden'。切换该隐藏节点 3600 权重的蓝红热力图
+     * （再调一次取消），同时清除分块详情。
      */
     highlightNode(layer, idx) {
       if (layer !== 'hidden') throw new Error(`highlightNode 暂不支持 layer='${layer}'。`);
-      if (!Number.isInteger(idx) || idx < 0 || idx >= 16) {
+      if (!Number.isInteger(idx) || idx < 0 || idx >= nH()) {
         throw new Error(`hidden 节点下标越界：${idx}。`);
       }
       state.heatmap = state.heatmap === idx ? null : idx;
+      state.heatColors = null;
+      state.blockDetail = null;
+      state.blockInfo = null;
+      render();
+    },
+
+    /** 清除热力图与分块详情，回到分块显示。 */
+    clearHighlight() {
+      state.heatmap = null;
+      state.heatColors = null;
+      state.blockDetail = null;
+      state.blockInfo = null;
       render();
     },
 
@@ -646,12 +797,45 @@ export function initStage(canvas, net) {
   /* ————— 点击交互 ————— */
 
   function hitHidden(lx, ly) {
-    for (let h = 0; h < 16; h++) {
-      const dx = lx - HIDDEN.x;
-      const dy = ly - hiddenY(h);
+    const n = nH();
+    for (let h = 0; h < n; h++) {
+      const [cx, cy] = hiddenXY(h);
+      const dx = lx - cx;
+      const dy = ly - cy;
       if (dx * dx + dy * dy <= (HIDDEN.r + 5) * (HIDDEN.r + 5)) return h;
     }
     return -1;
+  }
+
+  function hitBlock(lx, ly) {
+    const { x, y, cell, n } = BLOCKS;
+    if (lx < x || ly < y || lx >= x + n * cell || ly >= y + n * cell) return -1;
+    const bx = ((lx - x) / cell) | 0;
+    const by = ((ly - y) / cell) | 0;
+    return by * n + bx;
+  }
+
+  /** 分块 b 的 100 像素上 Σ|w1| 最大的 top-3 隐藏节点。 */
+  function blockTop3(b) {
+    const n = nIn();
+    const nHd = nH();
+    const bx = b % BLOCKS.n;
+    const by = (b / BLOCKS.n) | 0;
+    const sums = new Array(nHd);
+    for (let h = 0; h < nHd; h++) {
+      let s = 0;
+      const off = h * n;
+      for (let wy = 0; wy < BLOCKS.px; wy++) {
+        const row = off + (by * BLOCKS.px + wy) * 60 + bx * BLOCKS.px;
+        for (let wx = 0; wx < BLOCKS.px; wx++) s += Math.abs(state.net.w1[row + wx]);
+      }
+      sums[h] = s;
+    }
+    return sums
+      .map((s, h) => [s, h])
+      .sort((a, b2) => b2[0] - a[0])
+      .slice(0, 3)
+      .map(([, h]) => h);
   }
 
   function toLogical(ev) {
@@ -664,15 +848,33 @@ export function initStage(canvas, net) {
     const h = hitHidden(lx, ly);
     if (h >= 0) {
       api.highlightNode('hidden', h);
-    } else if (state.heatmap != null) {
-      state.heatmap = null;
-      render();
+      return;
     }
+    const b = hitBlock(lx, ly);
+    if (b >= 0) {
+      if (state.heatmap != null) {
+        state.heatmap = null;
+        state.heatColors = null;
+      }
+      if (state.blockDetail === b) {
+        state.blockDetail = null;
+        state.blockInfo = null;
+      } else {
+        state.blockDetail = b;
+        state.blockInfo = { b, top3: blockTop3(b) };
+      }
+    } else {
+      state.heatmap = null;
+      state.heatColors = null;
+      state.blockDetail = null;
+      state.blockInfo = null;
+    }
+    render();
   });
 
   canvas.addEventListener('mousemove', (ev) => {
     const [lx, ly] = toLogical(ev);
-    canvas.style.cursor = hitHidden(lx, ly) >= 0 ? 'pointer' : 'default';
+    canvas.style.cursor = hitHidden(lx, ly) >= 0 || hitBlock(lx, ly) >= 0 ? 'pointer' : 'default';
   });
 
   window.addEventListener('resize', () => {

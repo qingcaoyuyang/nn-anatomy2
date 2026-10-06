@@ -207,7 +207,7 @@ async function main() {
     await touch('touchEnd', []);
     await delay(500);
     const ink = await cdp.evaluate(`(() => {
-      const d = window.__nnanatomy.drawing.getPixels13();
+      const d = window.__nnanatomy.drawing.getPixels60();
       return Array.from(d).filter((v) => v > 0.05).length;
     })()`);
     check(ink > 0, `触屏画一笔 → 预览有墨（${ink} 像素）`);

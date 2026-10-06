@@ -90,7 +90,7 @@
         const panel = window.__nnanatomy.panel;
         ok(!!panel, 'panel api 就绪');
 
-        // —— 1. 导入示例数据集（1300 张） ——
+        // —— 1. 导入示例数据集（3300 张） ——
         setPhase('import');
         let lastPct = -1;
         await importSampleDataset(ws, {
@@ -103,12 +103,12 @@
         });
         const nTrain = ws.listSamples('train').length;
         const nTest = ws.listSamples('test').length;
-        ok(nTrain === 1000 && nTest === 300, `示例集导入 1000/300（实际 ${nTrain}/${nTest}）`);
+        ok(nTrain === 3000 && nTest === 300, `示例集导入 3000/300（实际 ${nTrain}/${nTest}）`);
         await panel.onSamplesChanged(); // 走真实通知路径：刷新计数 + 重评
         setPhase('import-done');
 
         // —— 2. 固定 seed 建模 → 训练 15 轮 ——
-        // 确定性：init seed=23 + app 训练 seed=1（首轮 runSeed）→ node 实测 acc=0.9033
+        // 确定性：init seed=23 + app 训练 seed=1（首轮 runSeed）→ node 实测 acc=0.9300（15 轮）
         setPhase('train');
         await panel.newModel('e2e', 23);
         await panel.batchTrain(15);

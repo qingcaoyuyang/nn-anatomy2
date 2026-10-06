@@ -34,7 +34,7 @@ test('Rust↔JS cross-check: preprocess outputs match, per-element |Δ| < 1e-12'
 
   let maxDelta = 0;
   for (const c of cases) {
-    const js = preprocess(makeImage(c.name, w, h), w, h);
+    const js = preprocess(makeImage(c.name, w, h), w, h, 13);
     assert.strictEqual(js.length, 169, `JS output length for ${c.name}`);
     assert.strictEqual(c.output.length, 169, `fixture length for ${c.name}`);
     for (let i = 0; i < 169; i++) {

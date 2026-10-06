@@ -1,11 +1,11 @@
 /**
- * 图像预处理：重心居中 + 降采样到 13×13 + 归一化（Rust 与 JS 双实现，逐位一致）。
- * ES module，零 npm 依赖。
+ * 图像预处理：重心居中 + 块平均到 N×N + 归一化（Rust 与 JS 双实现，逐位一致）。
+ * ES module，零 npm 依赖。默认输出 60×60 = 3600 维。
  *
  * # 精确算法定义（Rust / JS 共用，两实现逐行对应）
  *
  * 输入：灰度字节数组（0–255），尺寸 w×h，行优先（索引 `y*w + x`）。
- * 输出：13×13 = 169 个 f64，范围 [0, 1]。
+ * 输出：N×N 个 f64，范围 [0, 1]（N = outSize，默认 60）。
  *
  * ## Step 1 — 重心（center of mass）
  * 以灰度值为权重，x、y 为整数像素坐标（0..w-1 / 0..h-1），按 y=0..h、x=0..w
@@ -36,23 +36,21 @@
  * out = (v00·(1−fx) + v10·fx)·(1−fy) + (v01·(1−fx) + v11·fx)·fy
  * ```
  *
- * ## Step 3 — 降采样到 13×13（块平均，质量守恒）
- * 将平移后的图像 T（w×h）划分为 13×13 个互不重叠的矩形块；
- * 输出像素 (ox, oy)（ox、oy ∈ 0..13）为其块内像素的算术平均：
+ * ## Step 3 — 块平均到 N×N（质量守恒）
+ * 将平移后的图像 T（w×h）划分为 N×N 个互不重叠的矩形块；
+ * 输出像素 (ox, oy)（ox、oy ∈ 0..N）为其块内像素的算术平均：
  * ```text
- * x0 = floor(ox·w/13),  x1 = floor((ox+1)·w/13)
- * y0 = floor(oy·h/13),  y1 = floor((oy+1)·h/13)
+ * x0 = floor(ox·w/N),  x1 = floor((ox+1)·w/N)
+ * y0 = floor(oy·h/N),  y1 = floor((oy+1)·h/N)
  * O[ox, oy] = (Σ T[y·w+x]) / ((x1−x0)·(y1−y0))，其中 x ∈ [x0, x1)，y ∈ [y0, y1)
  * ```
  * 求和按 y = y0..y1−1 外层、x = x0..x1−1 内层的行优先顺序左结合；
- * 除数为块内像素个数的精确 f64 值；空块（w<13 或 h<13 时可能出现）输出 0.0。
- * 当 w = h = 260 时，每块恰为 20×20（400 像素）。
+ * 除数为块内像素个数的精确 f64 值；空块（w<N 或 h<N 时可能出现）输出 0.0。
  * 块之间无重叠、无遗漏（x1(ox) = x0(ox+1)），总质量守恒。
  *
- * ## 为什么不用“双线性逐点重采样到 26×26 再 2×2 平均”
+ * ## 为什么不用“双线性逐点重采样再平均”
  * 双线性重采样是逐点采样：260→26 时每 10 像素才取一个采样点，
  * 2 像素宽的笔画或单像素点可能正好落在采样点之间而被完全丢弃（混叠）；
- * 此时“居中后重心 ≈ (6,6)”的测试会因输出全零而被 m=0 兜底虚假通过。
  * 块平均对块内全部像素求平均，单像素点必定落入其所在块，
  * 测试真实有效，且更适合手写数字这种高频细节输入。
  *
@@ -65,9 +63,11 @@
  * - 全程仅使用 f64 的 +、−、×、/ 与 floor：IEEE-754 正确舍入，
  *   Rust 与 V8（JS）逐位一致；u8→f64 转换精确（u8 < 2^53）。
  * - 禁止使用 sqrt、exp、ln、三角函数等超越函数（本管线不需要）。
- * - 求和一律按文档顺序左结合；本文件与 `nn-core/src/nn/preprocess.rs` 逐行对应。
+ * - 求和一律按文档顺序左结合；本文件与 `nn-core/src/nn/preprocess.rs` 逐行对应
+ *   （Rust 侧固定 N=13；JS 侧 N 参数化，N=13 时逐行对应）。
  * - 交叉验证：`tests/preprocess-crosscheck.test.js` 读取 Rust 测试生成的
- *   `tests/fixtures/preprocess-crosscheck.json`，逐元素 |Δ| < 1e-12。
+ *   `tests/fixtures/preprocess-crosscheck.json`，以 outSize=13 调用，
+ *   逐元素 |Δ| < 1e-12。
  */
 
 /** 灰度图重心（像素坐标系）。全零图像返回画布中心 ((w−1)/2, (h−1)/2)。
@@ -77,21 +77,49 @@ export function centerOfMass(img, w, h) {
   return centerOfMassF64(Float64Array.from(img), w, h);
 }
 
-/** 居中 + 块平均到 13×13（未归一化，值域 [0, 255]）。 */
-export function resampleTo13(img, w, h) {
-  if (img.length !== w * h) throw new Error('resampleTo13: img.length 必须等于 w*h');
+/** 居中 + 块平均到 N×N（未归一化，值域 [0, 255]）。 */
+export function resampleToN(img, w, h, n) {
+  if (img.length !== w * h) throw new Error('resampleToN: img.length 必须等于 w*h');
+  if (!Number.isInteger(n) || n <= 0) throw new Error('resampleToN: n 必须为正整数');
   const f = Float64Array.from(img);
   const [cx, cy] = centerOfMassF64(f, w, h);
   const t = translateToCenter(f, w, h, cx, cy);
-  return blockAverageTo13(t, w, h);
+  return blockAverageToN(t, w, h, n);
 }
 
-/** 完整预处理管线：居中 + 降采样到 13×13 + 归一化到 [0, 1]，返回 169 个 f64。 */
-export function preprocess(img, w, h) {
-  const o = resampleTo13(img, w, h);
-  const out = new Float64Array(169);
-  for (let i = 0; i < 169; i++) out[i] = o[i] / 255;
+/** 居中 + 块平均到 13×13（未归一化，值域 [0, 255]）。保留供旧测试与 Rust 交叉验证。 */
+export function resampleTo13(img, w, h) {
+  return resampleToN(img, w, h, 13);
+}
+
+/**
+ * 完整预处理管线：居中 + 块平均到 outSize×outSize + 归一化到 [0, 1]。
+ * @param {number} [outSize=60] 输出边长，默认 60（返回 3600 个 f64）
+ */
+export function preprocess(img, w, h, outSize = 60) {
+  const o = resampleToN(img, w, h, outSize);
+  const n = outSize * outSize;
+  const out = new Float64Array(n);
+  for (let i = 0; i < n; i++) out[i] = o[i] / 255;
   return out;
+}
+
+/**
+ * 带中间信息的预处理：除归一化输出 x 外，还返回重心 (cx, cy) 与平移量 (dx, dy)，
+ * 供过程面板展示"图像如何拆解"。x 与 preprocess(img, w, h, outSize) 逐位一致。
+ */
+export function preprocessWithInfo(img, w, h, outSize = 60) {
+  if (img.length !== w * h) throw new Error('preprocessWithInfo: img.length 必须等于 w*h');
+  const f = Float64Array.from(img);
+  const [cx, cy] = centerOfMassF64(f, w, h);
+  const dx = (w - 1) / 2 - cx;
+  const dy = (h - 1) / 2 - cy;
+  const t = translateToCenter(f, w, h, cx, cy);
+  const o = blockAverageToN(t, w, h, outSize);
+  const n = outSize * outSize;
+  const x = new Float64Array(n);
+  for (let i = 0; i < n; i++) x[i] = o[i] / 255;
+  return { x, cx, cy, dx, dy };
 }
 
 /** f64 图像的重心（内部用；与 Rust 的 center_of_mass_f64 逐行对应）。 */
@@ -138,16 +166,16 @@ function translateToCenter(img, w, h, cx, cy) {
   return out;
 }
 
-/** 块平均到 13×13：块边界 x0 = floor(ox·w/13)、x1 = floor((ox+1)·w/13)
+/** 块平均到 N×N：块边界 x0 = floor(ox·w/N)、x1 = floor((ox+1)·w/N)
  *  （y 同理）；块内行优先左结合求和，除以块内像素个数；空块输出 0.0。 */
-function blockAverageTo13(t, w, h) {
-  const out = new Float64Array(13 * 13);
-  for (let oy = 0; oy < 13; oy++) {
-    for (let ox = 0; ox < 13; ox++) {
-      const x0 = Math.floor((ox * w) / 13);
-      const x1 = Math.floor(((ox + 1) * w) / 13);
-      const y0 = Math.floor((oy * h) / 13);
-      const y1 = Math.floor(((oy + 1) * h) / 13);
+function blockAverageToN(t, w, h, n) {
+  const out = new Float64Array(n * n);
+  for (let oy = 0; oy < n; oy++) {
+    for (let ox = 0; ox < n; ox++) {
+      const x0 = Math.floor((ox * w) / n);
+      const x1 = Math.floor(((ox + 1) * w) / n);
+      const y0 = Math.floor((oy * h) / n);
+      const y1 = Math.floor(((oy + 1) * h) / n);
       let sum = 0;
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
@@ -155,7 +183,7 @@ function blockAverageTo13(t, w, h) {
         }
       }
       const count = (x1 - x0) * (y1 - y0);
-      out[oy * 13 + ox] = count === 0 ? 0 : sum / count;
+      out[oy * n + ox] = count === 0 ? 0 : sum / count;
     }
   }
   return out;
