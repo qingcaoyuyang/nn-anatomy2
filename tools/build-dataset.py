@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-一次性构建示例数据集：MNIST → 每类采样 → 重心居中 → 13×13 灰度 PNG。
+一次性构建示例数据集：MNIST → 每类采样 → 重心居中 → 60×60 灰度 PNG。
 
 输出：data/sample-digits/{train|test}/{label}/{i:03d}.png
-  - train：每类 100 张（共 1000），test：每类 30 张（共 300）
+  - train：每类 300 张（共 3000），test：每类 30 张（共 300）
   - 与 js/dataset.js 的 samplePaths() 命名约定保持一致（i 为类内序号，从 0 起）。
 
 预处理与应用内管线（js/preprocess.js）语义一致、独立实现：
   1. 计算 28×28 灰度图的质心（重心）；
   2. 整数像素平移使质心落在画布中心 (13.5, 13.5)（四舍五入，边缘补 0）；
-  3. resize((13,13), Image.BOX)（面积平均）；
+  3. resize((60,60), Image.BOX)（面积平均）；
   4. 存为 mode 'L' 的灰度 PNG。
 
 仅依赖 PIL + 标准库（无 numpy）。MNIST 原始 .gz 缓存在 tools/.mnist-cache/（已 gitignore）。
@@ -40,11 +40,11 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_DIR = os.path.join(REPO_ROOT, "tools", ".mnist-cache")
 OUT_DIR = os.path.join(REPO_ROOT, "data", "sample-digits")
 
-TRAIN_PER_CLASS = 100
+TRAIN_PER_CLASS = 300
 TEST_PER_CLASS = 30
 SEED = 42
 IMG_SIZE = 28
-OUT_SIZE = 13
+OUT_SIZE = 60
 
 
 # ---------------- 下载 ----------------
@@ -124,8 +124,8 @@ def center_of_mass(pixels):
     return sx / mass, sy / mass
 
 
-def center_and_downsample(pixels):
-    """质心居中（整数平移）→ 13×13 面积平均 → 返回 PIL 'L' 图。"""
+def center_and_resize(pixels):
+    """质心居中（整数平移）→ OUT_SIZE×OUT_SIZE 面积平均 → 返回 PIL 'L' 图。"""
     cx, cy = center_of_mass(pixels)
     # 目标中心 (13.5, 13.5)，四舍五入（round-half-up，与 JS Math.round 一致；
     # 注意 Python 内建 round() 是 round-half-even，此处不能直接用）取整数偏移
@@ -162,7 +162,7 @@ def build_split(split, images_data, labels_data, per_class):
         for i, idx in enumerate(chosen):
             off = idx * IMG_SIZE * IMG_SIZE
             pixels = images_data[off:off + IMG_SIZE * IMG_SIZE]
-            small = center_and_downsample(pixels)
+            small = center_and_resize(pixels)
             small.save(os.path.join(out_dir, f"{i:03d}.png"))
             written += 1
     print(f"{split}：写入 {written} 张")
@@ -170,7 +170,7 @@ def build_split(split, images_data, labels_data, per_class):
 
 
 def self_check():
-    """脚本自带校验：总数、每类数量、抽查 20 张可读且为 13×13 'L'。"""
+    """脚本自带校验：总数、每类数量、抽查 20 张可读且为 OUT_SIZE×OUT_SIZE 'L'。"""
     total = 0
     for split, per_class in (("train", TRAIN_PER_CLASS), ("test", TEST_PER_CLASS)):
         for label in range(10):
@@ -181,9 +181,9 @@ def self_check():
             assert files == expected_names, f"{split}/{label}：命名不连续"
             total += len(files)
 
-    assert total == 1300, f"总数 {total}（期望 1300）"
+    assert total == 3300, f"总数 {total}（期望 3300）"
 
-    # 抽查 20 张：PIL 可读、13×13、mode 'L'、像素值有变化（非全黑）
+    # 抽查 20 张：PIL 可读、60×60、mode 'L'、像素值有变化（非全黑）
     rng = random.Random(7)
     checked = 0
     for _ in range(20):
@@ -194,12 +194,12 @@ def self_check():
         p = os.path.join(OUT_DIR, split, str(label), f"{i:03d}.png")
         im = Image.open(p)
         im.load()
-        assert im.size == (13, 13), f"{p}：尺寸 {im.size}"
+        assert im.size == (OUT_SIZE, OUT_SIZE), f"{p}：尺寸 {im.size}"
         assert im.mode == "L", f"{p}：mode {im.mode}"
         px = list(im.getdata())
         assert max(px) > 0, f"{p}：全黑图"
         checked += 1
-    print(f"自检通过：总数 {total}，抽查 {checked} 张均为 13×13 'L' 且非全黑")
+    print(f"自检通过：总数 {total}，抽查 {checked} 张均为 {OUT_SIZE}×{OUT_SIZE} 'L' 且非全黑")
 
 
 def main():
