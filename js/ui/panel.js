@@ -98,6 +98,9 @@ export function initPanel(root, api) {
         <button id="model-new" class="btn btn-secondary btn-sm" type="button">新建</button>
         <button id="model-del" class="btn btn-secondary btn-sm" type="button">删除</button>
       </div>
+      <div class="btn-row">
+        <button id="model-weights" class="btn btn-secondary btn-sm" type="button">查看权重</button>
+      </div>
       <dl class="kv">
         <div class="kv-row"><dt>模型</dt><dd class="mono" id="kv-model">—</dd></div>
         <div class="kv-row"><dt>优化器</dt><dd class="mono" id="kv-optimizer">Adam</dd></div>
@@ -266,6 +269,10 @@ export function initPanel(root, api) {
     } catch (e) {
       setTrainStatus(`创建模型失败：${e && e.message ? e.message : e}`);
     }
+  });
+
+  $('model-weights').addEventListener('click', () => {
+    if (api.openWeightsView) api.openWeightsView();
   });
 
   $('model-del').addEventListener('click', async () => {
@@ -547,17 +554,19 @@ export function initPanel(root, api) {
     m.epochsTrained = E0 + 1;
     pushHistory(m, samples);
     api.updateKv();
+    return { before, after, y: s0.y };
   }
 
   /**
    * 跑 epochs[firstJ..total]。firstJ===1 时首轮带舞台动画；其余用 trainEpochs
    * 分块（startEpoch=已训练轮数，保证 shuffle 与一次调用完全一致）。
-   * @returns {Promise<number>} 实际完成的轮数（本轮内 1-based 计数 done）
+   * @returns {Promise<{done:number, firstStep:object|null}>} 实际完成的轮数与首轮动画步的 before/after
    */
   async function runEpochs(m, samples, seed, total, firstJ) {
     let done = firstJ - 1;
+    let firstStep = null;
     if (firstJ === 1) {
-      await animatedFirstEpoch(m, samples, seed);
+      firstStep = await animatedFirstEpoch(m, samples, seed);
       done = 1;
       setTrainStatus(`第 1/${total} 轮完成（含舞台动画）。`);
       await yieldUi();
@@ -580,7 +589,7 @@ export function initPanel(root, api) {
       setTrainStatus(`第 ${j}/${total} 轮完成。`);
       await yieldUi();
     }
-    return done;
+    return { done, firstStep };
   }
 
   /** 开始训练（测试入口也调这个；epochs 缺省读输入框）。 */
@@ -614,9 +623,11 @@ export function initPanel(root, api) {
     setControlsEnabled(false);
     setTrainStatus(`训练开始：${samples.length} 个样本，${total} 轮…`);
     let weightsOk = true;
+    let firstStep = null;
     try {
-      const done = await runEpochs(m, samples, seed, total, 1);
-      trainRun.done = done;
+      const r = await runEpochs(m, samples, seed, total, 1);
+      trainRun.done = r.done;
+      firstStep = r.firstStep;
       if (trainRun.paused) {
         pausedState = { total, done, seed, modelName: m.name };
         setTrainStatus(`已暂停：完成 ${done}/${total} 轮。点击「继续」接着训练。`);
@@ -625,6 +636,12 @@ export function initPanel(root, api) {
       } else if (checkWeightsFinite(m)) {
         setTrainStatus(`训练完成：${total} 轮，轮次累计 ${m.epochsTrained}。`);
         if (api.notifyLesson) api.notifyLesson('trained');
+        if (firstStep) {
+          try {
+            const pp = api.getProcessPanel && api.getProcessPanel();
+            if (pp) pp.showTraining({ ...firstStep, lr: m.lr, optimizer: m.optimizer, epoch: m.epochsTrained });
+          } catch (e) { console.error('过程面板更新失败：', e); }
+        }
       } else {
         weightsOk = false; // NaN：已报错并亮出重置按钮；跳过评估与保存
       }
@@ -687,7 +704,8 @@ export function initPanel(root, api) {
     let weightsOk = true;
     try {
       // 同一 runSeed：shuffle 序列与不中断完全一致
-      const newDone = await runEpochs(m, samples, seed, total, done + 1);
+      const r2 = await runEpochs(m, samples, seed, total, done + 1);
+      const newDone = r2.done;
       trainRun.done = newDone;
       if (trainRun.paused) {
         pausedState = { total, done: newDone, seed, modelName: m.name };
@@ -750,6 +768,10 @@ export function initPanel(root, api) {
       m.samplesSeen++;
       singleStepCount++;
       api.updateKv();
+      try {
+        const pp = api.getProcessPanel && api.getProcessPanel();
+        if (pp) pp.showTraining({ before, after, y, lr: m.lr, optimizer: m.optimizer, epoch: m.epochsTrained });
+      } catch (e) { console.error('过程面板更新失败：', e); }
       // 节流：每 5 次单步保存一次（samplesSeen 丢失至多 4 次，文档写明）
       if (singleStepCount % 5 === 0) await api.saveModelNow();
     } finally {

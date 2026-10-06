@@ -15,6 +15,8 @@ import {
 } from '../workspace.js';
 import { initDrawing, BOARD_SIZE } from './drawing.js';
 import { initStage } from './stage.js';
+import { initProcessPanel } from './process-panel.js';
+import { initWeightsView } from './weights-view.js';
 import { createNetwork, forward } from '../network.js';
 import { createOptState } from '../trainer.js';
 import { ADAM_DEFAULT_LR, paramCount } from '../optimizer.js';
@@ -128,6 +130,8 @@ export async function boot({ workspaceBackend } = {}) {
   processSection.id = 'panel-process';
   processSection.setAttribute('aria-label', '过程面板');
   app.appendChild(processSection);
+  const processPanel = initProcessPanel(processSection);
+  debugHandle.processPanel = processPanel;
 
   // —— 工作区引导遮罩 ——
   const guide = document.createElement('div');
@@ -320,7 +324,10 @@ export async function boot({ workspaceBackend } = {}) {
     btn.disabled = true;
     try {
       const x = debugHandle.drawing.getPixels60();
-      await debugHandle.stage.playInference(x);
+      const trace = await debugHandle.stage.playInference(x);
+      if (processPanel && trace) {
+        processPanel.showInference(trace, debugHandle.drawing.getLastPreprocessInfo());
+      }
       notifyLesson('inference');
     } catch (e) {
       setStatus(`推理失败：${e && e.message ? e.message : e}`);
@@ -378,6 +385,7 @@ export async function boot({ workspaceBackend } = {}) {
     model.history = [];
     if (debugHandle.stage) debugHandle.stage.setNet(model.net);
     debugHandle.net = model.net;
+    if (processPanel) processPanel.setNet(model.net);
     await saveModelNow();
     updateKv();
   }
@@ -405,6 +413,7 @@ export async function boot({ workspaceBackend } = {}) {
     }
     debugHandle.stage.setNet(model.net);
     debugHandle.net = model.net;
+    if (processPanel) processPanel.setNet(model.net);
     updateKv();
   }
 
@@ -459,6 +468,7 @@ export async function boot({ workspaceBackend } = {}) {
     model.history = [];
     if (debugHandle.stage) debugHandle.stage.setNet(model.net);
     debugHandle.net = model.net;
+    if (processPanel) processPanel.setNet(model.net);
     await saveModelNow();
     updateKv();
     if (panelApi) await panelApi.refresh();
@@ -484,7 +494,13 @@ export async function boot({ workspaceBackend } = {}) {
     notifySamplesChanged,
     updateKv,
     openDatasetViewer: () => { if (viewerApi) viewerApi.open(); },
+    openWeightsView: () => { if (weightsViewApi) weightsViewApi.open(); },
+    getProcessPanel: () => processPanel,
   };
+
+  // —— 权重视图（modal） ——
+  const weightsViewApi = initWeightsView(api);
+  debugHandle.weightsView = weightsViewApi;
 
   // —— 右栏：训练面板 + 数据集管理（Task 11） ——
   panelApi = initPanel($('panel-right'), api);
