@@ -386,6 +386,125 @@ body.show-notes .notes{display:block}
   <div class="notes"><b>用时：</b>收尾后按需选用。</div>
 </div></div>
 
+<!-- 18 名词小词典 章节页 -->
+<div class="slide"><div class="slide-content" style="align-items:center;text-align:center">
+  <div class="act-tag">附 · 进阶</div>
+  <h1 class="cover" style="font-size:clamp(36px,6vh,68px)">📖 名词<span class="hl">小词典</span></h1>
+  <p class="sub">给想多知道一点的你<br>每个词：先听类比，再看一眼"技术上它到底是什么"</p>
+  <p class="sub" style="color:var(--faint)">压缩版可跳过 · 学员可带走</p>
+  <div class="notes"><b>用时：</b>进阶章节，时间紧可跳过。每个名词都是"类比+一句话技术讲"。</div>
+</div></div>
+
+<!-- 19 一次训练的7步旅程 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 核心</div>
+  <h2>一次训练的 <span class="hl">7 步旅程</span></h2>
+  <p class="sub">你写下"2"点"保存并训练"之后，机器里发生了什么——<b style="color:var(--ink)">每张图都要走完这 7 步，3000 张 × 15 轮</b></p>
+  <div class="chart-wrap" style="width:min(96%,860px)">
+  <svg viewBox="0 0 900 150" style="width:100%">
+    <defs><marker id="arw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#f59e0b"/></marker></defs>
+    <g font-size="13" text-anchor="middle">
+      <g><rect x="4" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#f59e0b"/><text x="60" y="62" fill="#f59e0b" font-size="20" font-weight="800">①写</text><text x="60" y="84" fill="#94a3b8">手写"2"</text><text x="60" y="102" fill="#94a3b8">点训练</text></g>
+      <g><rect x="134" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#38bdf8"/><text x="190" y="62" fill="#38bdf8" font-size="20" font-weight="800">②洗</text><text x="190" y="84" fill="#94a3b8">居中→60×60</text><text x="190" y="102" fill="#94a3b8">墨=1</text></g>
+      <g><rect x="264" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#38bdf8"/><text x="320" y="62" fill="#38bdf8" font-size="20" font-weight="800">③猜</text><text x="320" y="84" fill="#94a3b8">前向传播</text><text x="320" y="102" fill="#94a3b8">10个概率</text></g>
+      <g><rect x="394" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#f87171"/><text x="450" y="62" fill="#f87171" font-size="20" font-weight="800">④判</text><text x="450" y="84" fill="#94a3b8">Loss判分</text><text x="450" y="102" fill="#94a3b8">"错多少"</text></g>
+      <g><rect x="524" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#f87171"/><text x="580" y="62" fill="#f87171" font-size="20" font-weight="800">⑤查</text><text x="580" y="84" fill="#94a3b8">反向传播</text><text x="580" y="102" fill="#94a3b8">谁背锅</text></g>
+      <g><rect x="654" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#34d399"/><text x="710" y="62" fill="#34d399" font-size="20" font-weight="800">⑥拧</text><text x="710" y="84" fill="#94a3b8">Adam更新</text><text x="710" y="102" fill="#94a3b8">拧旋钮</text></g>
+      <g><rect x="784" y="35" width="112" height="80" rx="12" fill="#1e293b" stroke="#34d399"/><text x="840" y="62" fill="#34d399" font-size="20" font-weight="800">⑦循</text><text x="840" y="84" fill="#94a3b8">下一张</text><text x="840" y="102" fill="#94a3b8">循环往复</text></g>
+      <line x1="116" y1="75" x2="132" y2="75" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="246" y1="75" x2="262" y2="75" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="376" y1="75" x2="392" y2="75" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="506" y1="75" x2="522" y2="75" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="636" y1="75" x2="652" y2="75" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="766" y1="75" x2="782" y2="75" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw)"/>
+    </g>
+  </svg>
+  </div>
+  <div class="trait"><b>一句话：</b>学习 = 11 万个旋钮，每张图各被拧一小下，3000 张 × 15 轮之后，旋钮们摆对了位置。</div>
+  <div class="notes"><b>讲解：</b>这是全场最"技术"的一页，但别怕——每个词后面两页会拆开讲。先让学员对"7 步"有整体感：写→洗→猜→判→查→拧→循环。</div>
+</div></div>
+
+<!-- 20 前向传播 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 前向</div>
+  <h2><span class="hl">前向传播</span>：信号的旅程</h2>
+  <p class="sub">类比：<b style="color:var(--ink)">工厂流水线</b>，三道工序，像素进去、概率出来</p>
+  <div class="cols">
+    <div><h3>工序 1 · 加权求和</h3><p>每个侦探把 3600 个像素<b style="color:var(--ink)">按话语权加权</b>算总分，再加个"起跑分"（偏置）。<br><span style="color:var(--faint)">技术：z = Σw·x + b</span></p></div>
+    <div><h3>工序 2 · LeakyReLU</h3><p>负分不直接判死刑，给 <b style="color:var(--ink)">0.01 的"缓刑"</b>；正分原样通过。<br><span style="color:var(--faint)">技术：非线性。没有它，100 层也等价于 1 层</span></p></div>
+    <div><h3>工序 3 · Softmax</h3><p>把 10 个候选人的"嗓门"变成<b style="color:var(--ink)">得票率</b>，加起来 100%。<br><span style="color:var(--faint)">技术：指数归一化，输出概率分布</span></p></div>
+  </div>
+  <div class="chart-wrap" style="width:min(94%,800px)">
+  <svg viewBox="0 0 800 120" style="width:100%">
+    <defs><marker id="arw2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#f59e0b"/></marker></defs>
+    <g font-size="14" text-anchor="middle">
+      <rect x="10" y="30" width="150" height="60" rx="10" fill="#16213a" stroke="#38bdf8"/><text x="85" y="55" fill="#f1f5f9">3600 像素</text><text x="85" y="76" fill="#64748b" font-size="12">眼睛</text>
+      <rect x="220" y="30" width="150" height="60" rx="10" fill="#16213a" stroke="#f59e0b"/><text x="295" y="55" fill="#f1f5f9">32 侦探</text><text x="295" y="76" fill="#64748b" font-size="12">加权+LeakyReLU</text>
+      <rect x="430" y="30" width="150" height="60" rx="10" fill="#16213a" stroke="#f59e0b"/><text x="505" y="55" fill="#f1f5f9">10 候选人</text><text x="505" y="76" fill="#64748b" font-size="12">加权+Softmax</text>
+      <rect x="640" y="30" width="150" height="60" rx="10" fill="#16213a" stroke="#34d399"/><text x="715" y="55" fill="#f1f5f9">10 个概率</text><text x="715" y="76" fill="#64748b" font-size="12">"2" 82%</text>
+      <line x1="160" y1="60" x2="218" y2="60" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw2)"/>
+      <line x1="370" y1="60" x2="428" y2="60" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw2)"/>
+      <line x1="580" y1="60" x2="638" y2="60" stroke="#f59e0b" stroke-width="2" marker-end="url(#arw2)"/>
+    </g>
+  </svg>
+  </div>
+  <div class="op"><b>▶ 对应操作：</b>推理 / 实时预测走的都是这条路——只"猜"，不"复盘"</div>
+  <div class="notes"><b>讲解：</b>三道工序一句人话：加权（听谁的）→ 整形（喊多大声）→ 投票（得票率）。强调：推理时只有前向，没有反向——旋钮是冻结的。</div>
+</div></div>
+
+<!-- 21 反向传播 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 反向</div>
+  <h2><span class="hl">反向传播</span>：复盘的旅程</h2>
+  <p class="sub">类比：<b style="color:var(--ink)">考试复盘 + 追责</b>——从"你错了"倒着问"谁的锅"，再拧旋钮</p>
+  <div class="cols">
+    <div><h3>① Loss（判分）</h3><p>"答案是 2，你只给了 15%"→ 扣 <b style="color:var(--ink)">1.9 分</b>。<br><span style="color:var(--faint)">技术：交叉熵 -log(p[2])，猜得越离谱扣得越狠</span></p></div>
+    <div><h3>② 梯度（分锅）</h3><p>每个旋钮的"锅"=<b style="color:var(--ink)">往哪拧能减分、拧多少</b>。锅从后往前传：候选人→侦探→像素。<br><span style="color:var(--faint)">技术：链式法则求偏导</span></p></div>
+    <div><h3>③ Adam（拧旋钮）</h3><p><b style="color:var(--ink)">老司机</b>：记住惯性（动量），路难走小步、路好走大步。手劲 0.001。<br><span style="color:var(--faint)">技术：W -= 0.001 × 修正后的梯度</span></p></div>
+  </div>
+  <div class="trait"><b>学习如何产生：</b>每张图都让 11 万个旋钮<b>按"锅"各拧一小下</b>——锅大的多拧，锅小的少拧。3000 张 × 15 轮 = 45000 次微调，旋钮摆对了位置，"学会"就发生了。</div>
+  <div class="notes"><b>讲解：</b>这是"学习如何产生"的标准答案。手劲太大（学习率大）会拧过头震荡，手劲太小半天学不会——0.001 是经验值。</div>
+</div></div>
+
+<!-- 22 神经元三层 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 结构</div>
+  <h2>神经元的<span class="hl">三层</span></h2>
+  <div class="cols">
+    <div><h3>👁 输入层 · 3600</h3><p><b style="color:var(--ink)">眼睛 / 视网膜</b>。每只眼睛只看一个像素：0=没亮，1=全亮。<br><span style="color:var(--faint)">技术：60×60 灰度图展平，不做任何计算，只负责"看"</span></p></div>
+    <div><h3>🕵 隐藏层 · 32</h3><p><b style="color:var(--ink)">侦探团</b>。每人看<b style="color:var(--ink)">全部</b> 3600 只眼睛的报告，加权打分。<br><span style="color:var(--faint)">技术：全连接，每人有 3600 个权重 + 1 个偏置</span></p></div>
+    <div><h3>🏆 输出层 · 10</h3><p><b style="color:var(--ink)">候选人拉票</b>。每人听 32 个侦探的打分，汇总成得票率。<br><span style="color:var(--faint)">技术：全连接 + Softmax，10 个概率和为 1</span></p></div>
+  </div>
+  <div class="bridge"><b>全连接的意思：</b>每个侦探都看<b>所有</b>像素，每个候选人都听<b>所有</b>侦探——没有"只看一半"的。所以 32×3600 + 10×32 = 115,520 个旋钮，一个都不能少。</div>
+  <div class="notes"><b>讲解：</b>"全连接"是理解参数量的钥匙：3600×32=115200，32×10=320，加起来 115520。数字对上，学员会觉得"原来如此"。</div>
+</div></div>
+
+<!-- 23 旋钮家族 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 参数</div>
+  <h2><span class="hl">旋钮</span>家族</h2>
+  <div class="cols">
+    <div><h3>🎚 权重 Weight</h3><p><b style="color:var(--ink)">话语权</b>。连接上的数字，决定"上游信号有多大分量传到下游"。<br><span style="color:var(--faint)">技术：W1 32×3600，W2 10×32；知识全在这里</span></p></div>
+    <div><h3>🚦 偏置 Bias</h3><p><b style="color:var(--ink)">起跑分 / 门槛</b>。不看输入也有的基础分，让神经元有"默认倾向"。<br><span style="color:var(--faint)">技术：b1 32个，b2 10个；全零初始化</span></p></div>
+    <div><h3>🍲 梯度 Gradient</h3><p><b style="color:var(--ink)">锅 / 调整说明书</b>。告诉每个旋钮"往哪拧能减分、拧多少"。<br><span style="color:var(--faint)">技术：Loss 对每个参数的偏导数</span></p></div>
+    <div><h3>💪 学习率 LR</h3><p><b style="color:var(--ink)">手劲</b>。0.001。太大拧过头震荡，太小半天不动。<br><span style="color:var(--faint)">技术：梯度更新的步长，Adam 会自适应微调</span></p></div>
+  </div>
+  <div class="notes"><b>讲解：</b>四个词一次讲清"学"的 mechanics：权重是被拧的对象，偏置是配角，梯度是说明书，学习率是手劲。</div>
+</div></div>
+
+<!-- 24 考试与推理 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 检验</div>
+  <h2><span class="hl">考试</span>与<span class="hl">推理</span></h2>
+  <div class="cols">
+    <div><h3>📝 测试集</h3><p><b style="color:var(--ink)">高考</b>。300 道<b style="color:var(--ink)">没见过</b>的题，闭卷。训练时偷看=作弊。<br><span style="color:var(--faint)">技术：与训练集互斥，验真本事</span></p></div>
+    <div><h3>🎓 泛化</h3><p><b style="color:var(--ink)">举一反三</b>。没见过的题也对，才是真学会。<br><span style="color:var(--faint)">技术：在测试集上的表现，模型的终极指标</span></p></div>
+    <div><h3>🦜 过拟合</h3><p><b style="color:var(--ink)">死记硬背</b>。练习满分、高考翻车——我们 30 轮 92.3% 反而不如 15 轮 93%。<br><span style="color:var(--faint)">技术：训练误差小、测试误差大，记住了答案而非规律</span></p></div>
+    <div><h3>🔮 推理</h3><p><b style="color:var(--ink)">只猜不学</b>。考试和平时预测都只走前向，旋钮冻结，不再复盘。<br><span style="color:var(--faint)">技术：forward only，无反向、无更新</span></p></div>
+  </div>
+  <div class="notes"><b>讲解：</b>用我们自己的真实数据讲过拟合（30轮反而降）最有说服力。推理=冻结的模型，强调"学"和"用"是两个阶段。</div>
+</div></div>
+
 <!-- 15 操作清单 -->
 <div class="slide"><div class="slide-content">
   <div class="act-tag">讲师备忘</div>
