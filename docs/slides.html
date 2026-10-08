@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>走进 AI 的内部世界 · 课程幻灯片</title>
+<style>
+:root{
+  --bg:#0f172a; --card:#1e293b; --card2:#16213a;
+  --ink:#f1f5f9; --muted:#94a3b8; --faint:#64748b;
+  --amber:#f59e0b; --amber-soft:rgba(245,158,11,.14);
+  --blue:#38bdf8; --blue-soft:rgba(56,189,248,.12);
+  --red:#f87171; --green:#34d399;
+  --font:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:#020617;color:var(--ink);font-family:var(--font);overflow:hidden}
+.slide-deck{position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--bg)}
+@media(min-width:769px){
+  .slide-deck{max-width:calc(100vh*16/9);max-height:calc(100vw*9/16);margin:auto;position:absolute;inset:0;
+    box-shadow:0 0 80px rgba(0,0,0,.6)}
+}
+.slide{position:absolute;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;
+  align-items:center;padding:5vh 6vw;opacity:0;visibility:hidden;transition:opacity .4s;overflow:hidden;
+  background:radial-gradient(1200px 600px at 50% -10%,rgba(245,158,11,.07),transparent 60%),var(--bg)}
+.slide.active{opacity:1;visibility:visible}
+.slide-content{width:100%;max-width:1100px;max-height:100%;overflow:hidden;display:flex;flex-direction:column;
+  justify-content:center;gap:2.2vh}
+.act-tag{align-self:flex-start;font-size:clamp(12px,1.6vh,15px);color:var(--amber);border:1px solid rgba(245,158,11,.5);
+  padding:.5vh 1.4vw;border-radius:99px;letter-spacing:2px;background:var(--amber-soft)}
+h1.cover{font-size:clamp(40px,7.5vh,84px);line-height:1.15;letter-spacing:4px}
+h1.cover .hl{color:var(--amber)}
+h2{font-size:clamp(28px,4.6vh,52px);line-height:1.25;letter-spacing:2px}
+h2 .hl{color:var(--amber)}
+.sub{font-size:clamp(15px,2.2vh,22px);color:var(--muted);line-height:1.7}
+.big{font-size:clamp(18px,2.8vh,30px);line-height:1.8}
+ul.points{list-style:none;display:flex;flex-direction:column;gap:1.6vh;font-size:clamp(16px,2.5vh,26px);line-height:1.6}
+ul.points li{padding-left:2.2vw;position:relative}
+ul.points li::before{content:"▸";position:absolute;left:.4vw;color:var(--amber)}
+.cols{display:flex;gap:3vw}
+.cols>div{flex:1;background:var(--card);border-radius:14px;padding:2.4vh 2vw}
+.cols h3{font-size:clamp(16px,2.4vh,24px);color:var(--amber);margin-bottom:1.2vh}
+.cols p{font-size:clamp(14px,2.1vh,20px);color:var(--muted);line-height:1.7}
+.trait{background:var(--amber-soft);border-left:5px solid var(--amber);border-radius:0 12px 12px 0;
+  padding:1.8vh 2vw;font-size:clamp(16px,2.5vh,25px);line-height:1.65}
+.trait b{color:var(--amber)}
+.bridge{background:var(--blue-soft);border:1px solid rgba(56,189,248,.35);border-radius:12px;
+  padding:1.6vh 2vw;font-size:clamp(14px,2.2vh,21px);line-height:1.65;color:#cbd5e1}
+.bridge b{color:var(--blue)}
+.op{background:var(--card);border:1px dashed rgba(148,163,184,.4);border-radius:12px;
+  padding:1.4vh 2vw;font-size:clamp(13px,2vh,19px);color:var(--muted);line-height:1.7}
+.op b{color:var(--ink)}
+.kv{display:flex;gap:2vw;align-items:stretch}
+.kv .n{flex:0 0 auto;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  background:var(--card);border-radius:14px;padding:2vh 2.4vw;min-width:11vw}
+.kv .n .v{font-family:var(--mono);font-size:clamp(30px,6vh,64px);color:var(--amber);font-weight:800}
+.kv .n .l{font-size:clamp(12px,1.8vh,17px);color:var(--muted);margin-top:.6vh}
+table.ops{width:100%;border-collapse:collapse;font-size:clamp(13px,2vh,19px)}
+table.ops th{text-align:left;color:var(--amber);padding:1vh 1vw;border-bottom:2px solid rgba(245,158,11,.35);font-weight:600}
+table.ops td{padding:1vh 1vw;border-bottom:1px solid rgba(148,163,184,.15);color:#cbd5e1;line-height:1.6}
+.qa{background:var(--card);border-radius:14px;padding:2vh 2vw}
+.qa .q{font-size:clamp(16px,2.5vh,25px);color:var(--amber);margin-bottom:1vh;font-weight:700}
+.qa .a{font-size:clamp(14px,2.2vh,21px);color:#cbd5e1;line-height:1.75}
+.qa .a b{color:var(--ink)}
+.notes{display:none;background:#020617;border:1px solid rgba(245,158,11,.35);border-radius:10px;
+  padding:1.4vh 1.6vw;font-size:clamp(12px,1.8vh,16px);color:var(--muted);line-height:1.7;max-height:24vh;overflow:auto}
+.notes b{color:var(--amber)}
+body.show-notes .notes{display:block}
+.progress-bar{position:fixed;top:0;left:0;height:4px;background:linear-gradient(90deg,var(--amber),#fbbf24);
+  transition:width .3s;z-index:1000}
+.nav-controls{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);display:flex;align-items:center;
+  gap:18px;z-index:1000}
+.nav-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;width:42px;height:42px;
+  border-radius:50%;cursor:pointer;font-size:18px}
+.nav-btn:hover{background:rgba(245,158,11,.35)}
+.nav-btn.small{width:auto;padding:0 16px;border-radius:21px;font-size:13px;height:36px}
+.slide-counter{color:rgba(255,255,255,.55);font-size:14px;font-family:var(--mono)}
+.chart-wrap{width:min(88%,640px);margin:0 auto}
+.tick{color:var(--green);font-weight:700}
+@media(max-width:768px){
+  .slide{padding:4vh 6vw}.cols{flex-direction:column}.kv{flex-direction:column}
+  h1.cover{letter-spacing:2px}h2{letter-spacing:1px}
+}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<div class="slide-deck" id="deck">
+
+<!-- 1 封面 -->
+<div class="slide active"><div class="slide-content" style="align-items:center;text-align:center">
+  <div class="act-tag">给非技术人的一场解剖课</div>
+  <h1 class="cover">走进 <span class="hl">AI</span> 的<br>内部世界</h1>
+  <p class="sub">亲手切开一个 AI，看它到底怎么"学会"<br>——看完你会发现，大模型和这个小东西，骨子里是同一套原理</p>
+  <p class="sub" style="margin-top:3vh;color:var(--faint)">零公式 · 零代码 · 全程看演示、听类比</p>
+  <div class="notes"><b>开场白：</b>大家平时用 AI 对话、画图、写方案，感觉它很神。今天换个玩法：不把它当工具，当"病人"——切开看看里面到底是什么。今天三不：不讲公式、不写代码、不背概念。只干三件事：看它犯错、看它学会、看它"思考"。</div>
+</div></div>
+
+<!-- 2 今天怎么玩 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">开场 · 5 分钟</div>
+  <h2>今天我们 <span class="hl">怎么玩</span></h2>
+  <div class="cols">
+    <div><h3>🚫 三不</h3><p>不讲公式<br>不写代码<br>不背概念</p></div>
+    <div><h3>👀 三做</h3><p>看它<b style="color:var(--ink)">犯错</b><br>看它<b style="color:var(--ink)">学会</b><br>看它<b style="color:var(--ink)">"思考"</b></p></div>
+    <div><h3>🎯 结束时</h3><p>你能用一句话<br>跟家里人讲明白<br><b style="color:var(--ink)">"AI 是怎么学会的"</b></p></div>
+  </div>
+  <div class="notes"><b>立规矩用：</b>结束时你能用一句话跟家里人讲明白"AI 是怎么学会的"，这堂课就算成了。预告：这个小 AI 只有 11 万个零件，ChatGPT 有上千亿个，但它们的"学习方式"一模一样。</div>
+</div></div>
+
+<!-- 3 预告 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">预告</div>
+  <h2>11 万 <span class="hl">vs</span> 上千亿</h2>
+  <div class="kv">
+    <div class="n"><div class="v">11万</div><div class="l">今天解剖的小 AI<br>零件（旋钮）数</div></div>
+    <div class="n"><div class="v">千亿</div><div class="l">ChatGPT 级别<br>零件（旋钮）数</div></div>
+    <div class="n"><div class="v" style="color:var(--blue)">一样</div><div class="l">学习的<br>方式</div></div>
+  </div>
+  <div class="trait"><b>带走的三句话：</b>① AI 是"练"会的，不是"编"会的 ② 所谓智能，就是海量旋钮摆对了位置 ③ 数据决定上限</div>
+  <div class="notes"><b>预告用：</b>先把三句话摆出来，课结束时请学员复述，形成闭环。</div>
+</div></div>
+
+<!-- 4 第一幕 空的大脑 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">第一幕 · 10 分钟</div>
+  <h2>它现在 <span class="hl">什么都不会</span></h2>
+  <ul class="points">
+    <li>这 11 万个数字，是<b>调音台上的旋钮</b>——每个旋钮管"这个像素亮了，'这是 2' 加几分"</li>
+    <li>现在所有旋钮都是出厂随机拧的：<b>新生儿的大脑</b>——结构完整，一片空白</li>
+    <li>写个 2，点推理：10 根概率柱都在 10% 晃——<b>它在瞎猜</b></li>
+  </ul>
+  <div class="op"><b>▶ 操作：</b>右栏「新建」→「查看权重」→ 画板写个 2 →「▶ 推理」</div>
+  <div class="trait"><b>底层特质 ①：</b>AI 的知识<b>不在代码里，在旋钮的位置里</b>。程序只规定"怎么拧旋钮"，拧成什么样是学出来的。</div>
+  <div class="bridge"><b>大模型连接：</b>ChatGPT 的知识也在上千亿个旋钮的位置里——这就是为什么模型文件有几十 GB：装的不是代码，是"拧好的旋钮"。</div>
+  <div class="notes"><b>讲解：</b>先把术语扔了。问大家"猜它能认出 2 吗"，写完点推理，10% 概率柱=抛硬币。强调：旋钮是乱的，出来的就是噪声。</div>
+</div></div>
+
+<!-- 5 第二幕 32侦探 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">第二幕 · 10 分钟</div>
+  <h2>32 个<span class="hl">"特征侦探"</span></h2>
+  <ul class="points">
+    <li>舞台中间 32 个黄圆圈 = 32 个侦探：一号专看<b>横线</b>，二号专看<b>竖线</b>，七号专看<b>圆圈</b></li>
+    <li>单击圆圈看它的"眼力"（热力图），双击拿<b>显微镜</b>看 60×60 权重表</li>
+    <li>现在点开任意一个：全是噪点——侦探们还没上岗，都是"睁眼瞎"</li>
+  </ul>
+  <div class="op"><b>▶ 操作：</b>单击黄色圆圈 → 热力图；双击圆圈 → 60×60 权重表（可缩放+放大镜）</div>
+  <div class="trait"><b>底层特质 ②：</b><b>分工。</b>AI 不靠一个"聪明"部件，靠大量"笨"部件各管一小块，拼出智能。</div>
+  <div class="bridge"><b>大模型连接：</b>大模型里有上万个"侦探"：有的专看语法，有的专看逻辑，有的专看"这句话像不像讽刺"。规模变了，分工逻辑没变。</div>
+  <div class="notes"><b>讲解：</b>你的大脑也一样——没有单个神经元懂"2"，是它们投票投出来的。双击大表格是"显微镜时刻"，让学员感受"透视 AI 大脑"。</div>
+</div></div>
+
+<!-- 6 第三幕 教它认字 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">第三幕 · 15 分钟</div>
+  <h2>教它认字：<span class="hl">犯错 → 复盘 → 微调</span></h2>
+  <div class="cols">
+    <div><h3>🔵 蓝粒子前流</h3><p>它在"猜"</p></div>
+    <div><h3>🔴 红粒子后流</h3><p>它在"复盘"：哪个侦探误报了？</p></div>
+    <div><h3>✨ 权重闪烁</h3><p>它在"微调"：误报的拧小，报对的拧大</p></div>
+  </div>
+  <div class="chart-wrap">
+  <svg viewBox="0 0 640 220" style="width:100%;background:var(--card);border-radius:12px">
+    <text x="20" y="24" fill="#94a3b8" font-size="14">loss（错题本上的红叉）随训练下降</text>
+    <line x1="50" y1="190" x2="620" y2="190" stroke="#475569"/>
+    <line x1="50" y1="190" x2="50" y2="30" stroke="#475569"/>
+    <path d="M50,60 C140,70 200,95 280,110 C360,125 450,150 610,175" fill="none" stroke="#f59e0b" stroke-width="4"/>
+    <circle cx="50" cy="60" r="6" fill="#f59e0b"/><circle cx="610" cy="175" r="6" fill="#34d399"/>
+    <text x="56" y="52" fill="#f59e0b" font-size="13">开始：错得离谱</text>
+    <text x="500" y="200" fill="#34d399" font-size="13">15 轮后：错得很少</text>
+  </svg>
+  </div>
+  <div class="op"><b>▶ 操作：</b>0–9 各手写一张「保存并训练」<b>（字写大、写正、写满）</b>→ 看过程面板 loss 下降</div>
+  <div class="trait"><b>底层特质 ③：</b><b>学习 = 犯错 → 找到原因 → 微调 → 再试</b>，循环几千次。没有顿悟，就是笨功夫。</div>
+  <div class="bridge"><b>大模型连接：</b>大模型训练一模一样：题目换成"猜下一个词"，万亿次，几个亿的电。笨功夫 × 天文数字 = 智能涌现。</div>
+  <div class="notes"><b>讲解：</b>类比教三岁小孩认数字卡。loss 就是"错题本上的红叉"，往下掉=学会了。提醒学员：实验数据证明小字识别率只有大字的 1/4，所以一定要写大。</div>
+</div></div>
+
+<!-- 7 第四幕 考试 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">第四幕 · 10 分钟</div>
+  <h2>考试：数据不够，<span class="hl">聪明也白搭</span></h2>
+  <ul class="points">
+    <li>只做了 10 道练习题，直接去高考——准确率惨不忍睹</li>
+    <li>看混淆矩阵：它老把 <b>4 认成 9</b>——"有个圈、上面有竖"，在它眼里长得像</li>
+    <li>它不是"粗心"，它是真没见过足够的 4</li>
+  </ul>
+  <div class="op"><b>▶ 操作：</b>手写几个数字测试 → 点测试集评估 → 看混淆矩阵（点格子看错分样本）</div>
+  <div class="trait"><b>底层特质 ④：</b><b>AI 的自信和它的无知成正比</b>——把 4 认成 9 时，概率柱可能很高："理直气壮地答错"。记住这个感觉。</div>
+  <div class="bridge"><b>大模型连接：</b>大模型"一本正经胡说八道"（幻觉）就是这个：只管概率最大，不管真假。小模型认错字理直气壮的样子 = 大模型编造引用时的样子。</div>
+  <div class="notes"><b>讲解：</b>这里埋个钩子："记住'理直气壮答错'这个感觉，待会儿讲大模型胡说八道时要考。" 混淆矩阵用人话讲：行是正确答案，列是它猜的。</div>
+</div></div>
+
+<!-- 8 第五幕 题海 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">第五幕 · 10 分钟</div>
+  <h2>题海战术：<span class="hl">大力出奇迹</span></h2>
+  <div class="chart-wrap">
+  <svg viewBox="0 0 640 240" style="width:100%;background:var(--card);border-radius:12px">
+    <text x="20" y="24" fill="#94a3b8" font-size="14">测试集准确率：10 张练习 vs 3000 张题海</text>
+    <rect x="120" y="150" width="120" height="60" rx="8" fill="#f87171"/>
+    <rect x="400" y="40" width="120" height="170" rx="8" fill="#34d399"/>
+    <text x="180" y="140" fill="#f1f5f9" font-size="20" text-anchor="middle" font-weight="700">~15%</text>
+    <text x="460" y="30" fill="#f1f5f9" font-size="20" text-anchor="middle" font-weight="700">93%</text>
+    <text x="180" y="228" fill="#94a3b8" font-size="14" text-anchor="middle">10 张图</text>
+    <text x="460" y="228" fill="#94a3b8" font-size="14" text-anchor="middle">3000 张图</text>
+    <line x1="50" y1="210" x2="620" y2="210" stroke="#475569"/>
+  </svg>
+  </div>
+  <ul class="points">
+    <li>再看 32 个侦探的热力图：噪点变成了<b>横、竖、撇、捺、圈</b>——被 3000 张图"磨"出了绝活</li>
+    <li>从瞎猜到 93 分，<b>没换过一行代码</b>——变的只是旋钮位置和题量</li>
+  </ul>
+  <div class="op"><b>▶ 操作：</b>导入 3000 张 → 训练 15 轮 → 再看权重 → 再评估（课前可预训练）</div>
+  <div class="trait"><b>底层特质 ⑤：</b><b>智能是"磨"出来的，不是"设计"出来的。</b>给够数据、给够时间，笨办法也能磨出聪明。</div>
+  <div class="bridge"><b>大模型连接：</b>大模型 = 同样笨办法 × 整个互联网 × 一年电。量变堆到某点，侦探们突然开始"协作"——就像背了 3000 个单词某天突然能读文章了。</div>
+  <div class="notes"><b>讲解：</b>训练等待时可以去倒水。回来先看热力图再看分数，顺序别反——"长出绝活"比"93%"更震撼。</div>
+</div></div>
+
+<!-- 9 第六幕 看它思考 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">第六幕 · 10 分钟</div>
+  <h2>看它"<span class="hl">思考</span>"：概率的舞蹈</h2>
+  <ul class="points">
+    <li>慢写一个 2，写一笔停一下，看概率柱——</li>
+    <li>写一横："可能是 7" → 加一撇："2 上升了" → 写完："2 定在 80%"</li>
+    <li><b>它跟你一样，是"看着看着就猜出来"的</b></li>
+  </ul>
+  <div class="op"><b>▶ 操作：</b>打开实时推理，慢写一个 2（每笔都刷新大数字 + top-3）</div>
+  <div class="trait"><b>底层特质 ⑥：</b>AI 的"思考"就是<b>一遍遍算概率</b>。它从不"确定"，只说"70% 像 2，20% 像 3"。</div>
+  <div class="bridge"><b>大模型连接：</b>ChatGPT 打字机式输出 = 每蹦一个词就算一次"下一个词概率最大是谁"。走一步算一步，和你写 2 时它逐笔改主意一模一样。</div>
+  <div class="notes"><b>讲解：</b>这是全场最直观的一幕。让学员自己上来写一个，概率柱跟着手跳舞，现场效果最好。</div>
+</div></div>
+
+<!-- 10 收尾三句话 -->
+<div class="slide"><div class="slide-content" style="align-items:center;text-align:center">
+  <div class="act-tag">收尾 · 10 分钟</div>
+  <h2>三句话，<span class="hl">请复述</span></h2>
+  <div class="kv" style="justify-content:center">
+    <div class="n"><div class="v" style="font-size:clamp(20px,3.4vh,36px)">练会</div><div class="l">AI 是"练"会的<br>不是"编"会的</div></div>
+    <div class="n"><div class="v" style="font-size:clamp(20px,3.4vh,36px)">旋钮</div><div class="l">智能 = 海量旋钮<br>摆对了位置</div></div>
+    <div class="n"><div class="v" style="font-size:clamp(20px,3.4vh,36px)">数据</div><div class="l">数据决定上限<br>见过的题型越多越不容易错</div></div>
+  </div>
+  <div class="notes"><b>收尾用：</b>请学员复述，能复述=带走了。然后进"一个问题"。</div>
+</div></div>
+
+<!-- 11 一个问题 -->
+<div class="slide"><div class="slide-content" style="align-items:center;text-align:center">
+  <div class="act-tag">留给大家的问题</div>
+  <h2>11 万个旋钮认数字<br>上千亿个旋钮能聊天——</h2>
+  <p class="big" style="color:var(--amber)">它"思考"的方式，和你刚才看到的，有本质区别吗？</p>
+  <p class="sub" style="margin-top:2vh">（停顿）<br><br>没有。都是旋钮，都是试错，都是概率。<br><b style="color:var(--ink)">规模变了，骨架没变。</b><br><br>下次再听到"大模型很神秘"，你就知道：<br>神秘的是规模，不是原理——原理你今天已经亲手摸过了。</p>
+  <div class="notes"><b>题眼：</b>这是全课的题眼。停顿 3 秒再给答案。说完谢谢大家。</div>
+</div></div>
+
+<!-- 12 备用问答1 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">备用问答</div>
+  <h2>学员最爱问的 <span class="hl">(1/2)</span></h2>
+  <div class="qa"><div class="q">Q：它真的"懂"吗，还是在装懂？</div>
+    <div class="a">它不懂"2 是什么"，只知道"长这样的像素组合，70% 叫 2"。大模型也一样——算的是"下一个词最可能是什么"，不是在"理解"。但这不妨碍它有用：<b>你不需要懂发动机，也能开车。</b></div></div>
+  <div class="qa"><div class="q">Q：为什么 AI 会一本正经地胡说八道？</div>
+    <div class="a">还记得第四幕吗？它把 4 认成 9 时理直气壮——<b>只管概率最大，不管真假。</b>大模型编造引用是同一个毛病。<b>用 AI 的第一课：它自信的时候，不一定对。</b></div></div>
+  <div class="notes"><b>用时：</b>收尾后按需选用，不必全讲。</div>
+</div></div>
+
+<!-- 13 备用问答2 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">备用问答</div>
+  <h2>学员最爱问的 <span class="hl">(2/2)</span></h2>
+  <div class="qa"><div class="q">Q：AI 会取代我们吗？</div>
+    <div class="a">它擅长"见过的题型"，不擅长"没见过的"。你的价值恰恰在没见过的题里。今天之后你比它多一个优势：<b>你知道它是怎么想的，它不知道你是怎么想的。</b>（点到为止）</div></div>
+  <div class="qa"><div class="q">Q：大模型和小模型到底差在哪？角落小字为啥认错？</div>
+    <div class="a">差三样：<b>旋钮数量</b>（11 万 vs 上千亿）、<b>读的书</b>（3000 张图 vs 整个互联网）、<b>烧的电</b>。角落小字认错因为它只见过"大而居中"的字——<b>AI 的聪明有边界，边界就是它见过的数据。</b>（实验：大字 60.3% vs 小字 15.7%）</div></div>
+  <div class="notes"><b>用时：</b>收尾后按需选用。</div>
+</div></div>
+
+<!-- 14 操作清单 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">讲师备忘</div>
+  <h2><span class="hl">操作</span>清单</h2>
+  <table class="ops">
+    <tr><th>幕</th><th>系统操作</th><th>看点</th></tr>
+    <tr><td>二</td><td>「新建」→「查看权重」→ 写 2 →「▶ 推理」</td><td>10% 瞎猜</td></tr>
+    <tr><td>三</td><td>单击黄圆圈 → 热力图；双击 → 60×60 大表</td><td>显微镜</td></tr>
+    <tr><td>四</td><td>0–9 各写一张「保存并训练」（写大写正）→ 过程面板</td><td>红蓝粒子，loss 下降</td></tr>
+    <tr><td>五</td><td>手写测试 + 测试集评估 + 混淆矩阵</td><td>4→9，点格子看错分</td></tr>
+    <tr><td>六</td><td>导入 3000 张 → 15 轮 → 再看权重 → 再评估</td><td>噪点变笔画，93%</td></tr>
+    <tr><td>七</td><td>实时推理，慢写一个 2</td><td>概率柱打架</td></tr>
+  </table>
+  <div class="notes"><b>此页仅讲师可见用（放映时可跳过）：</b>对照系统操作，别讲high了忘记点按钮。</div>
+</div></div>
+
+<!-- 15 课前准备 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">讲师备忘</div>
+  <h2><span class="hl">课前</span>准备</h2>
+  <ul class="points">
+    <li><span class="tick">✓</span> 提前导入 3000 张、训练 15 轮、<b>保存模型</b>——课上第六幕直接加载，省 2 分钟</li>
+    <li><span class="tick">✓</span> 留一个<b>空模型</b>，专供第二幕演示"瞎猜"</li>
+    <li><span class="tick">✓</span> 标题旁核对版本号（双击看更新日志），确保和学员手里的包一致</li>
+    <li><span class="tick">✓</span> 时间：完整 85 分钟 / 压缩 60 分钟（删 ★ 两处 + 问答留 2 个）</li>
+  </ul>
+  <div class="notes"><b>此页仅讲师可见用（放映时可跳过）。</b></div>
+</div></div>
+
+<!-- 16 谢谢 -->
+<div class="slide"><div class="slide-content" style="align-items:center;text-align:center">
+  <h1 class="cover">谢谢大家</h1>
+  <p class="sub">AI 是"练"会的 · 智能是旋钮摆对了位置 · 数据决定上限</p>
+  <p class="sub" style="margin-top:3vh;color:var(--faint)">走进 AI 的内部世界 · 大众版</p>
+</div></div>
+
+</div><!-- /.slide-deck -->
+
+<div class="nav-controls">
+  <button class="nav-btn" id="btnPrev" aria-label="上一页">←</button>
+  <span class="slide-counter"><span id="current">1</span> / <span id="total">16</span></span>
+  <button class="nav-btn" id="btnNext" aria-label="下一页">→</button>
+  <button class="nav-btn small" id="btnNotes" aria-label="讲稿备注">备注</button>
+</div>
+
+<script>
+let current=1;
+const total=document.querySelectorAll('.slide').length;
+document.getElementById('total').textContent=total;
+function showSlide(n){
+  if(n<1)n=1; if(n>total)n=total; current=n;
+  document.querySelectorAll('.slide').forEach((s,i)=>s.classList.toggle('active',i===n-1));
+  document.getElementById('current').textContent=n;
+  document.getElementById('progressBar').style.width=(n/total*100)+'%';
+  try{history.replaceState(null,'','#'+n)}catch(e){}
+  fitSlide();
+}
+/* 内容超高时整体缩小，保证不截断：
+   先取消高度上限让容器按内容自然高度撑开（消除相对溢出），再整体缩放 */
+function fitSlide(){
+  const el=document.querySelector('.slide.active .slide-content');
+  if(!el)return;
+  el.style.transform=''; el.style.height='';
+  el.style.maxHeight='none'; el.style.flexShrink='0';
+  const h=el.offsetHeight;
+  const slideBox=el.parentElement.getBoundingClientRect();
+  const st=getComputedStyle(el.parentElement);
+  const avail=(slideBox.height-parseFloat(st.paddingTop)-parseFloat(st.paddingBottom))*0.98;
+  if(h>avail+2){
+    el.style.height=h+'px';
+    el.style.transform='scale('+(avail/h).toFixed(3)+')';
+    el.style.transformOrigin='center center';
+  }else{
+    el.style.maxHeight=''; el.style.flexShrink='';
+  }
+}
+window.addEventListener('resize',fitSlide);
+document.getElementById('btnNext').onclick=(e)=>{e.stopPropagation();showSlide(current+1)};
+document.getElementById('btnPrev').onclick=(e)=>{e.stopPropagation();showSlide(current-1)};
+document.getElementById('btnNotes').onclick=(e)=>{e.stopPropagation();document.body.classList.toggle('show-notes')};
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();showSlide(current+1)}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();showSlide(current-1)}
+  else if(e.key==='n'||e.key==='N'){document.body.classList.toggle('show-notes')}
+  else if(e.key==='Home'){showSlide(1)} else if(e.key==='End'){showSlide(total)}
+});
+document.getElementById('deck').addEventListener('click',(e)=>{
+  if(e.target.closest('.nav-controls'))return;
+  showSlide(current+1);
+});
+(function(){const m=location.hash.match(/#(\d+)/);if(m)showSlide(parseInt(m[1],10));})();
+showSlide(current);
+</script>
+</body>
+</html>
