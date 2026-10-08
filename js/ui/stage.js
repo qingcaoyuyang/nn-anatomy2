@@ -849,14 +849,21 @@ export function initStage(canvas, net) {
     return [(ev.clientX - r.left) * (W / r.width), (ev.clientY - r.top) * (H / r.height)];
   }
 
-  canvas.addEventListener('click', (ev) => {
-    const [lx, ly] = toLogical(ev);
-    const h = hitHidden(lx, ly);
+  /* ————— 单击 / 双击区分 —————
+   * 浏览器原生 dblclick 在两次 click 之后才触发，而单击会切换状态
+   *（选中/取消、热力图/分块），导致双击到来时状态已被破坏、权重表弹不出。
+   * 改用“延迟单击 + 手动双击判定”：350ms 内点中同一目标算双击，直接弹
+   * 权重表且不执行单击切换；否则 350ms 后执行单击。 */
+  const CLICK_DELAY = 350;
+  const DBL_DIST = 14; // 逻辑像素
+  let clickTimer = null;
+  let lastClick = null; // { t, x, y, h, b }
+
+  function doSingleClick(lx, ly, h, b) {
     if (h >= 0) {
       api.highlightNode('hidden', h);
       return;
     }
-    const b = hitBlock(lx, ly);
     if (b >= 0) {
       if (state.heatmap != null) {
         state.heatmap = null;
@@ -876,6 +883,35 @@ export function initStage(canvas, net) {
       state.blockInfo = null;
     }
     render();
+  }
+
+  canvas.addEventListener('click', (ev) => {
+    const [lx, ly] = toLogical(ev);
+    const now = performance.now();
+    const h = hitHidden(lx, ly);
+    const b = h >= 0 ? -1 : hitBlock(lx, ly);
+    if (
+      lastClick &&
+      now - lastClick.t < CLICK_DELAY &&
+      Math.hypot(lx - lastClick.x, ly - lastClick.y) < DBL_DIST &&
+      ((h >= 0 && h === lastClick.h) || (b >= 0 && b === lastClick.b))
+    ) {
+      // 双击：取消待执行的单击，直接弹权重表（不切换选中态）
+      if (clickTimer) {
+        clearTimeout(clickTimer);
+        clickTimer = null;
+      }
+      lastClick = null;
+      if (h >= 0) openWeightTable(h);
+      else if (state.heatmap != null) openWeightTable(state.heatmap);
+      return;
+    }
+    lastClick = { t: now, x: lx, y: ly, h, b };
+    if (clickTimer) clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      doSingleClick(lx, ly, h, b);
+    }, CLICK_DELAY);
   });
 
   canvas.addEventListener('mousemove', (ev) => {
@@ -958,21 +994,6 @@ export function initStage(canvas, net) {
       c2d.beginPath(); c2d.moveTo(0, p); c2d.lineTo(SIZE, p); c2d.stroke();
     }
   }
-
-  canvas.addEventListener('dblclick', (ev) => {
-    const [lx, ly] = toLogical(ev);
-    // 双击黄色圆圈：直接打开该隐藏节点的 60×60 权重表
-    const h = hitHidden(lx, ly);
-    if (h >= 0) {
-      openWeightTable(h);
-      return;
-    }
-    // 双击输入墙（权重热力图模式下）：打开当前热力图节点的权重表
-    if (state.heatmap == null) return;
-    const { x, y, cell, n } = BLOCKS;
-    if (lx < x || ly < y || lx >= x + n * cell || ly >= y + n * cell) return;
-    openWeightTable(state.heatmap);
-  });
 
   window.addEventListener('resize', () => {
     fitCanvas(canvas, ctx);
