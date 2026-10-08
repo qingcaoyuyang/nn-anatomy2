@@ -923,76 +923,190 @@ export function initStage(canvas, net) {
    * 双击输入墙（权重热力图模式下）：弹出 60×60 大表格，
    * 每个格子背景=权重热力色、文字=权重数值，透视模型内部。
    */
+  /**
+   * 权重透视表：60×60 大表格 + 缩放 + 放大镜。
+   * 表格可缩放（12–48px/格，滚动查看）；鼠标移到格子上，右侧放大镜
+   * 显示 7×7 邻域（大字数字），点击亦可（触屏）。
+   */
   function openWeightTable(h) {
     const net = state.net;
     if (!net) return;
     const n = nIn();
     const off = h * n;
-    // 归一化基准（与 heatColors 一致的 max|w|）
     let m = 1e-9;
     for (let i = 0; i < n; i++) {
       const a = Math.abs(net.w1[off + i]);
       if (a > m) m = a;
     }
-    const CELL = 12;
-    const SIZE = 60 * CELL;
+    const W = (x, y) => net.w1[off + y * 60 + x];
+    const heat = (w) => {
+      const k = clamp01(Math.abs(w) / m);
+      const c = Math.round(245 - 200 * k);
+      return { bg: w >= 0 ? `rgb(${c},${c},245)` : `rgb(245,${c},${c})`, fg: k > 0.55 ? '#ffffff' : '#1c1917' };
+    };
+
+    const ZOOMS = [12, 16, 20, 24, 32, 48];
+    let zi = 3; // 默认 24px/格
+    let hover = null; // {x, y}
+
+    // —— DOM ——
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);display:flex;' +
-      'align-items:center;justify-content:center;z-index:10000;padding:12px;box-sizing:border-box;';
+    overlay.className = 'wtable-overlay';
     const box = document.createElement('div');
-    box.style.cssText = 'background:#fff;border-radius:12px;max-width:96vw;max-height:94vh;overflow:auto;' +
-      'padding:16px 18px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.35);';
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '×';
-    closeBtn.setAttribute('aria-label', '关闭');
-    closeBtn.style.cssText = 'position:absolute;top:10px;right:12px;width:30px;height:30px;border:none;' +
-      'background:#f1f5f9;border-radius:15px;font-size:16px;cursor:pointer;color:#475569;line-height:1;';
-    const title = document.createElement('div');
-    title.style.cssText = 'font-size:15px;font-weight:800;margin:0 40px 4px 0;color:#0f172a;';
-    title.textContent = `隐藏节点 h${h} 的 3600 个权重（w1[${h}·3600+i]，按 60×60 排布）`;
-    const note = document.createElement('div');
-    note.style.cssText = 'font-size:12px;color:#64748b;margin-bottom:10px;';
-    note.textContent = '蓝色=正权重（看到墨就兴奋），红色=负权重（看到墨就抑制）；格内数字为权重值（3 位小数）。';
-    const cv = document.createElement('canvas');
-    cv.width = SIZE;
-    cv.height = SIZE;
-    cv.style.cssText = `width:${SIZE}px;height:${SIZE}px;image-rendering:pixelated;`;
-    box.appendChild(closeBtn);
-    box.appendChild(title);
-    box.appendChild(note);
-    box.appendChild(cv);
+    box.className = 'wtable-box';
+    box.innerHTML = `
+      <button class="wtable-close" aria-label="关闭">×</button>
+      <div class="wtable-title">隐藏节点 h${h} 的 3600 个权重（w1[${h}·3600+i]，按 60×60 排布）</div>
+      <div class="wtable-note">蓝色=正权重（看到墨就兴奋），红色=负权重（看到墨就抑制）。可缩放滚动查看；鼠标移到格子上，右侧放大镜显示 7×7 邻域大字数值。</div>
+      <div class="wtable-toolbar">
+        <button class="wtable-zoom" data-z="-1" aria-label="缩小">－</button>
+        <span class="wtable-zoomlabel"></span>
+        <button class="wtable-zoom" data-z="1" aria-label="放大">＋</button>
+      </div>
+      <div class="wtable-body">
+        <div class="wtable-scroll"><canvas class="wtable-canvas"></canvas></div>
+        <div class="wtable-mag">
+          <div class="wtable-magtitle">放大镜</div>
+          <canvas class="wtable-magcanvas"></canvas>
+          <div class="wtable-magval"></div>
+        </div>
+      </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     const close = () => overlay.remove();
-    closeBtn.addEventListener('click', close);
+    box.querySelector('.wtable-close').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     const onKey = (e) => { if (e.key === 'Escape') { close(); window.removeEventListener('keydown', onKey); } };
     window.addEventListener('keydown', onKey);
 
-    const c2d = cv.getContext('2d');
-    c2d.textAlign = 'center';
-    c2d.textBaseline = 'middle';
-    c2d.font = '7px ui-monospace, Menlo, Consolas, monospace';
-    for (let i = 0; i < 3600; i++) {
-      const w = net.w1[off + i];
-      const k = clamp01(Math.abs(w) / m);
-      const c = Math.round(245 - 200 * k);
-      const px = (i % 60) * CELL;
-      const py = ((i / 60) | 0) * CELL;
-      c2d.fillStyle = w >= 0 ? `rgb(${c},${c},245)` : `rgb(245,${c},${c})`;
-      c2d.fillRect(px, py, CELL, CELL);
-      // 数值文字：深色底用白字、浅色底用黑字
-      c2d.fillStyle = k > 0.55 ? '#ffffff' : '#1c1917';
-      c2d.fillText(w.toFixed(3), px + CELL / 2, py + CELL / 2 + 0.5);
+    const tCanvas = box.querySelector('.wtable-canvas');
+    const zoomLabel = box.querySelector('.wtable-zoomlabel');
+    const magCanvas = box.querySelector('.wtable-magcanvas');
+    const magVal = box.querySelector('.wtable-magval');
+    const base = document.createElement('canvas'); // 缩放级缓存
+
+    function renderTable() {
+      const cell = ZOOMS[zi];
+      const size = 60 * cell;
+      for (const cv of [tCanvas, base]) { cv.width = size; cv.height = size; }
+      tCanvas.style.width = `${size}px`;
+      tCanvas.style.height = `${size}px`;
+      const c = base.getContext('2d');
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const showText = cell >= 16;
+      if (showText) c.font = `${Math.max(8, Math.round(cell * 0.52))}px ui-monospace, Menlo, Consolas, monospace`;
+      for (let i = 0; i < 3600; i++) {
+        const w = net.w1[off + i];
+        const { bg, fg } = heat(w);
+        const px = (i % 60) * cell;
+        const py = ((i / 60) | 0) * cell;
+        c.fillStyle = bg;
+        c.fillRect(px, py, cell, cell);
+        if (showText) {
+          c.fillStyle = fg;
+          c.fillText(w.toFixed(3), px + cell / 2, py + cell / 2 + 0.5);
+        }
+      }
+      c.strokeStyle = 'rgba(100,116,139,.4)';
+      c.lineWidth = 1;
+      for (let g = 0; g <= 6; g++) {
+        const p = g * 10 * cell + 0.5;
+        c.beginPath(); c.moveTo(p, 0); c.lineTo(p, size); c.stroke();
+        c.beginPath(); c.moveTo(0, p); c.lineTo(size, p); c.stroke();
+      }
+      zoomLabel.textContent = `${cell}px / 格`;
+      drawHover();
     }
-    // 网格线（每 10 像素一格，对应可视化分块）
-    c2d.strokeStyle = 'rgba(100,116,139,.35)';
-    c2d.lineWidth = 1;
-    for (let g = 0; g <= 6; g++) {
-      const p = g * 10 * CELL + 0.5;
-      c2d.beginPath(); c2d.moveTo(p, 0); c2d.lineTo(p, SIZE); c2d.stroke();
-      c2d.beginPath(); c2d.moveTo(0, p); c2d.lineTo(SIZE, p); c2d.stroke();
+
+    function drawHover() {
+      const cell = ZOOMS[zi];
+      const v = tCanvas.getContext('2d');
+      v.drawImage(base, 0, 0);
+      if (hover) {
+        v.strokeStyle = '#0f172a';
+        v.lineWidth = Math.max(2, cell / 12);
+        v.strokeRect(hover.x * cell + 1, hover.y * cell + 1, cell - 2, cell - 2);
+      }
     }
+
+    function renderMagnifier(cx, cy) {
+      const R = 3; // 7×7
+      const mc = 46;
+      const size = (R * 2 + 1) * mc;
+      magCanvas.width = size;
+      magCanvas.height = size;
+      magCanvas.style.width = `${size}px`;
+      magCanvas.style.height = `${size}px`;
+      const c = magCanvas.getContext('2d');
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = '14px ui-monospace, Menlo, Consolas, monospace';
+      for (let dy = -R; dy <= R; dy++) {
+        for (let dx = -R; dx <= R; dx++) {
+          const x = cx + dx;
+          const y = cy + dy;
+          const px = (dx + R) * mc;
+          const py = (dy + R) * mc;
+          if (x < 0 || x >= 60 || y < 0 || y >= 60) {
+            c.fillStyle = '#f1f5f9';
+            c.fillRect(px, py, mc, mc);
+            continue;
+          }
+          const w = W(x, y);
+          const { bg, fg } = heat(w);
+          c.fillStyle = bg;
+          c.fillRect(px, py, mc, mc);
+          c.fillStyle = fg;
+          c.fillText(w.toFixed(3), px + mc / 2, py + mc / 2 + 0.5);
+        }
+      }
+      c.strokeStyle = 'rgba(100,116,139,.35)';
+      c.lineWidth = 1;
+      for (let g = 0; g <= R * 2 + 1; g++) {
+        const p = g * mc + 0.5;
+        c.beginPath(); c.moveTo(p, 0); c.lineTo(p, size); c.stroke();
+        c.beginPath(); c.moveTo(0, p); c.lineTo(size, p); c.stroke();
+      }
+      c.strokeStyle = '#0f172a';
+      c.lineWidth = 3;
+      c.strokeRect(R * mc + 1.5, R * mc + 1.5, mc - 3, mc - 3);
+      magVal.textContent = `像素 (${cx}, ${cy}) · w = ${W(cx, cy).toFixed(6)}`;
+    }
+
+    function pickCell(ev) {
+      const r = tCanvas.getBoundingClientRect();
+      const cell = ZOOMS[zi];
+      const x = Math.floor((ev.clientX - r.left) / (r.width / 60));
+      const y = Math.floor((ev.clientY - r.top) / (r.height / 60));
+      void cell;
+      if (x < 0 || x >= 60 || y < 0 || y >= 60) return null;
+      return { x, y };
+    }
+
+    tCanvas.addEventListener('mousemove', (ev) => {
+      const p = pickCell(ev);
+      if (p && (!hover || p.x !== hover.x || p.y !== hover.y)) {
+        hover = p;
+        drawHover();
+        renderMagnifier(p.x, p.y);
+      }
+    });
+    tCanvas.addEventListener('mouseleave', () => { hover = null; drawHover(); });
+    tCanvas.addEventListener('click', (ev) => {
+      const p = pickCell(ev);
+      if (p) { hover = p; drawHover(); renderMagnifier(p.x, p.y); }
+    });
+
+    box.querySelectorAll('.wtable-zoom').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        zi = Math.min(ZOOMS.length - 1, Math.max(0, zi + Number(btn.dataset.z)));
+        renderTable();
+      });
+    });
+
+    renderTable();
+    renderMagnifier(30, 30);
   }
 
   window.addEventListener('resize', () => {
