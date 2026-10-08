@@ -61,6 +61,73 @@ function workspaceDisplayName(workspace) {
 }
 
 /**
+ * 版本号徽标：从 version.json（打包时由 tools/gen-version.py 生成）读取
+ * 版本与更新日志，显示在标题旁；双击弹出更新日志，方便核对包版本。
+ */
+let versionInfo = null;
+async function initVersionBadge() {
+  const badge = document.getElementById('app-version');
+  if (!badge) return;
+  try {
+    const res = await fetch('version.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    versionInfo = await res.json();
+  } catch {
+    versionInfo = null;
+  }
+  badge.textContent = versionInfo ? `v${versionInfo.version}` : 'dev版';
+  badge.addEventListener('dblclick', (ev) => {
+    ev.stopPropagation();
+    openChangelog();
+  });
+}
+
+/** 更新日志弹窗。 */
+function openChangelog() {
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const overlay = document.createElement('div');
+  overlay.className = 'changelog-overlay';
+  const box = document.createElement('div');
+  box.className = 'changelog-box';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'changelog-close';
+  closeBtn.textContent = '×';
+  closeBtn.setAttribute('aria-label', '关闭');
+  const title = document.createElement('div');
+  title.className = 'changelog-title';
+  const list = document.createElement('div');
+  list.className = 'changelog-list';
+  if (versionInfo && versionInfo.changelog && versionInfo.changelog.length) {
+    title.textContent = `更新日志（当前版本 v${versionInfo.version}）`;
+    for (const e of versionInfo.changelog) {
+      const row = document.createElement('div');
+      row.className = 'changelog-row';
+      const cur = versionInfo.built_from && e.hash === versionInfo.built_from.hash;
+      if (cur) row.classList.add('is-current');
+      row.innerHTML =
+        `<span class="changelog-date">${esc(e.date)}</span>` +
+        `<code class="changelog-hash">${esc(e.short)}</code>` +
+        `<span class="changelog-subject">${esc(e.subject)}${cur ? ' ← 当前版本' : ''}</span>`;
+      list.appendChild(row);
+    }
+  } else {
+    title.textContent = '更新日志';
+    list.innerHTML = '<div class="changelog-empty">开发模式：无版本信息（version.json 缺失）。</div>';
+  }
+  const close = () => overlay.remove();
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  const onKey = (e) => { if (e.key === 'Escape') { close(); window.removeEventListener('keydown', onKey); } };
+  window.addEventListener('keydown', onKey);
+  box.appendChild(closeBtn);
+  box.appendChild(title);
+  box.appendChild(list);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+/**
  * 启动应用。
  * @param {{ workspaceBackend?: object }} [opts] 传入 backend（测试用）时跳过工作区引导，
  *   直接用 Workspace.create(backend) 初始化。
@@ -74,12 +141,15 @@ export async function boot({ workspaceBackend } = {}) {
   const topbar = document.createElement('header');
   topbar.className = 'topbar';
   topbar.innerHTML = `
-    <h1 class="topbar-title">神经网络解剖教室</h1>
+    <h1 class="topbar-title">神经网络解剖教室
+      <span class="version-badge" id="app-version" title="双击查看更新日志">…</span>
+    </h1>
     <div class="topbar-right">
       <span class="ws-name" id="ws-name">未选择工作区</span>
       <button class="btn btn-ghost" id="ws-switch" type="button">切换工作区</button>
     </div>`;
   app.appendChild(topbar);
+  initVersionBadge();
 
   // —— 教学引导条（Task 12） ——
   const lessonBar = document.createElement('div');

@@ -749,3 +749,50 @@ html, body {
   white-space: nowrap;
 }
 .proc-note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+
+/* —— 版本号徽标 + 更新日志弹窗 —— */
+.version-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  vertical-align: middle;
+  cursor: default;
+  user-select: none;
+  letter-spacing: 0;
+}
+.changelog-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; box-sizing: border-box;
+}
+.changelog-box {
+  background: #fff; border-radius: 12px;
+  width: 620px; max-width: 94vw; max-height: 84vh;
+  display: flex; flex-direction: column;
+  padding: 18px 20px; position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.changelog-close {
+  position: absolute; top: 12px; right: 14px;
+  width: 30px; height: 30px; border: none; border-radius: 15px;
+  background: #f1f5f9; color: #475569; font-size: 16px; line-height: 1; cursor: pointer;
+}
+.changelog-title { font-size: 16px; font-weight: 800; color: #0f172a; margin: 0 40px 12px 0; }
+.changelog-list { overflow-y: auto; border-top: 1px solid #f1f5f9; }
+.changelog-row {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 8px 4px; border-bottom: 1px solid #f8fafc; font-size: 13px;
+}
+.changelog-row.is-current { background: #fefce8; }
+.changelog-date { color: #94a3b8; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; white-space: nowrap; }
+.changelog-hash { color: #b45309; font-size: 12px; white-space: nowrap; }
+.changelog-subject { color: #334155; }
+.changelog-empty { padding: 20px; color: #94a3b8; font-size: 13px; text-align: center; }
