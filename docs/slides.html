@@ -543,6 +543,19 @@ body.show-notes .notes{display:block}
   <div class="notes"><b>讲解：</b>用我们自己的真实数据讲过拟合（30轮反而降）最有说服力。推理=冻结的模型，强调"学"和"用"是两个阶段。</div>
 </div></div>
 
+<!-- 25 贝叶斯视角 -->
+<div class="slide"><div class="slide-content">
+  <div class="act-tag">名词小词典 · 贝叶斯</div>
+  <h2><span class="hl">贝叶斯</span>视角：先有看法，见到证据，更新看法</h2>
+  <div class="cols">
+    <div><h3>🎯 先验 Prior</h3><p><b style="color:var(--ink)">第一印象</b>。训练集 10 个数字各 300 张 → 每个天生 10%。空模型 10 个 10% 的概率柱，就是"一无所知时的诚实"。<br><span style="color:var(--faint)">技术：P(y)，类别先验分布</span></p></div>
+    <div><h3>🔍 似然 Likelihood</h3><p><b style="color:var(--ink)">长相知识</b>。"这张图有多像 2"——存在 115,520 个权重里，是 45,000 次更新攒下的。<br><span style="color:var(--faint)">技术：P(x|y)，权重编码的类别条件分布</span></p></div>
+    <div><h3>📊 后验 Posterior</h3><p><b style="color:var(--ink)">最终判断</b>。Softmax 吐出的 10 个概率 = P(是2|这张图)，综合先验和证据后的答案。<br><span style="color:var(--faint)">技术：P(y|x) = P(x|y)·P(y)/P(x)，Softmax 输出即后验</span></p></div>
+    <div><h3>🔄 更新 Update</h3><p><b style="color:var(--ink)">后验变先验</b>。每张训练图都是一次"先验→证据→后验"；拧旋钮就是把后验写进权重，变成下一次的先验。<br><span style="color:var(--faint)">技术：45,000 次序列更新；所谓学会 = 先验被打磨成准的后验</span></p></div>
+  </div>
+  <div class="notes"><b>讲解：</b>严格说 MLP 是点估计而非真贝叶斯推断（不维护权重分布），但"用证据更新信念"的骨架一致；Adam 是优化技巧不是贝叶斯规则。彩蛋：数据偏见 = 被污染的先验——训练集不均匀，模型还没看图心里已经偏了。</div>
+</div></div>
+
 <!-- 15 操作清单 -->
 <div class="slide"><div class="slide-content">
   <div class="act-tag">讲师备忘</div>
