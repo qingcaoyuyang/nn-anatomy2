@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # 打 Mac 包：git archive + 注入 version.json（版本号徽标/更新日志用）。
 # 用法：bash tools/build-mac-zip.sh [输出路径] [分支]
-# 默认：/home/hatch/workspace/nn-anatomy2-mac.zip，分支 build
+# 默认：/home/hatch/workspace/nn-anatomy2-mac.zip，分支 main
 set -euo pipefail
 OUT="${1:-/home/hatch/workspace/nn-anatomy2-mac.zip}"
-BRANCH="${2:-build}"
+BRANCH="${2:-main}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 TMPV="$(mktemp /tmp/nn-anatomy2-version.XXXXXX.json)"
 
