@@ -1,6 +1,6 @@
 # 神经网络解剖教室
 
-一个**纯静态网页**：在浏览器里手写数字，亲眼看着 169→16→10 的全连接网络做前向传播、反向训练，并在测试集上评估泛化。零 npm 依赖、零后端——本地起个静态服务即用。
+一个**纯静态网页**：在浏览器里手写数字，亲眼看着 3600→32→10 的全连接网络做前向传播、反向训练，并在测试集上评估泛化。零 npm 依赖、零后端——本地起个静态服务即用。
 
 ![三栏界面：数据采集｜神经网络舞台｜训练](docs/screenshots/main.png)
 
@@ -15,6 +15,8 @@ cd nn-anatomy2
 python3 -m http.server 8080
 # 浏览器打开 http://127.0.0.1:8080/index.html
 ```
+
+页面标题旁有**版本号徽标**（显示当前 git tag），双击徽标可查看更新日志。
 
 ## 浏览器要求
 
@@ -36,37 +38,43 @@ python3 -m http.server 8080
     <模型名>.nnmodel.json    # 权重 + 优化器状态 + 训练元信息
 ```
 
-换电脑时整个文件夹拷走即迁移。示例数据集（一键导入，1000 训练 / 300 测试，13×13 MNIST 风格）存在仓库 `data/sample-digits/`，导入后进 `samples/`。
+换电脑时整个文件夹拷走即迁移。示例数据集（一键导入，3000 训练 / 300 测试，60×60 灰度 PNG）存在仓库 `data/sample-digits/`，导入后进 `samples/`。
 
 ## 玩法（四阶段引导）
 
 页面顶部有一条教学引导，按顺序体验：
 
-1. **像素化**——在左边画板写一个数字，看它被压缩成 13×13 输入；
-2. **前向传播**——点「▶ 推理」，看信号粒子流过 16 个隐藏节点，输出 10 个概率柱；
+1. **像素化**——在左边画板写一个数字，看它被压缩成 60×60 输入；
+2. **前向传播**——点「▶ 推理」，看信号粒子流过 32 个隐藏节点，输出 10 个概率柱；
 3. **训练**——点「保存并训练」：红色误差粒子反向流动，权重边泛起脉冲，输出柱对比更新前后；
 4. **泛化**——一键导入示例数据集，训练 15 轮，在测试集上看准确率、每类准确率和 10×10 混淆矩阵（点格子可看错分的样本原图、删错标）。
 
-点击隐藏节点可看它 169 个输入权重的热力图；再点一次恢复。
+**透视权重**：舞台中间 32 个黄色圆圈内标 0–31。单击圆圈，左侧输入墙切换显示该节点 3600 个输入权重的蓝红热力图；双击圆圈（或双击输入墙）弹出 60×60 权重数值表，每 10 格有分块线，支持缩放（12–48px/格）与右侧 7×7 放大镜（大字数值 + 像素坐标 + 6 位小数读数）。
+
+**过程面板**：「一次训练的 7 步旅程」——写→洗→猜→判→查→拧→循，逐段讲清一次训练里发生了什么。
+
+课堂演示的 7 步流程见 `docs/lecture-script-general.md`（大众版讲义），配套幻灯片 `docs/slides.html`。
 
 ## 架构
 
 ```
 index.html
 js/
-  network.js / optimizer.js / rng.js   # 引擎：169→16→10 MLP，LeakyReLU(0.01)，Softmax
+  network.js / optimizer.js / rng.js   # 引擎：3600→32→10 MLP（115,562 参数），LeakyReLU(0.01)，Softmax
   trainer.js                           # trainEpochs / evaluate / inferWithTrace（带 trace 的前向）
-  preprocess.js                        # 260×260 → 居中 → 13×13 → 归一化
+  preprocess.js                        # 260×260 → 居中 → 60×60 → 归一化
   dataset.js                           # 示例数据集导入 / loadSamples（墨=1 极性解码）
   workspace.js                         # 工作区：真实目录 handle / OPFS / 内存三后端
   ui/
     app.js        # 装配：画板+标签+保存、模型状态、教学引导接线
-    drawing.js    # 260×260 手写画板（Pointer Events）
+    drawing.js    # 260×260 手写画板（Pointer Events，逐笔实时预测）
     stage.js      # 神经网络舞台：Canvas 2D，粒子动画
     particles.js  # 纯数学粒子系统（无 DOM）
     panel.js      # 训练控制 + 指标 + 混淆矩阵
     dataset-viewer.js  # 数据集管理 modal
     lesson.js     # 四阶段引导条
+    process-panel.js  # 过程面板：一次训练的 7 步旅程
+    weights-view.js   # 60×60 权重透视表 + 7×7 放大镜
 ```
 
 - **零运行时依赖**：ES Modules + Canvas 2D + File System Access API，不跑 `npm install`。
@@ -77,14 +85,18 @@ js/
 ## 开发命令
 
 ```bash
-node --test tests/*.test.js     # 逻辑单测（52）
+node --test tests/*.test.js     # 逻辑单测（54）
 node tests/walkthrough.js       # UI 走查：空状态/按钮态/NaN恢复/reduced-motion/触屏/移动端
-node tests/e2e.js               # 端到端：导入1300张 → 建模(seed=23) → 训练15轮 → acc≥0.9 → 存取round-trip
+node tests/e2e.js               # 端到端：导入3300张 → 建模(seed=23) → 训练15轮 → 测试集 acc 断言 → 存取round-trip
 ```
 
 各烟雾页（headless Chromium 验证用）：`tests/browser/ui-task9.html`、`ui-task10.html`、`ui-task11.html`、`walkthrough.html`、`e2e.html`。
 
 ## 已知限制
 
-- Headless 测试环境（CI/沙盒）里 IndexedDB/OPFS 的 promise 不 resolve、大尺寸 PNG 的 `createImageBitmap` 会挂起——走查与 E2E 用 `MemoryBackend` + 小尺寸样本；以下需在**真机 Chrome**确认：260×260 手写 PNG 端到端解码、1300 张全量导入性能、真实目录持久化、原生 rAF 动画流畅度。
-- 示例数据集准确率与初始化 seed 相关（16 个隐藏单元很小，init lottery 明显）；E2E 用固定 seed=23（15 轮 Adam 可达 ~0.90），日常使用多试几次或多训几轮。
+- Headless 测试环境（CI/沙盒）里 IndexedDB/OPFS 的 promise 不 resolve、大尺寸 PNG 的 `createImageBitmap` 会挂起——走查与 E2E 用 `MemoryBackend` + 小尺寸样本；以下需在**真机 Chrome**确认：260×260 手写 PNG 端到端解码、3300 张全量导入性能、真实目录持久化、原生 rAF 动画流畅度。
+- 示例数据集准确率与初始化 seed 相关（32 个隐藏单元下 init lottery 仍明显）；E2E 用固定 seed=23（15 轮 Adam，测试集 93.00%），日常使用多试几次或多训几轮。
+
+## 版本
+
+版本号规则见 `CHANGELOG.md`：`v主版本.次版本.修订号`（语义化版本）。每个版本打同名 git tag，软件内标题旁的版本号徽标显示的即是该 tag，与 GitHub Release 一一对应。
